@@ -3,7 +3,7 @@ import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { 
   Terminal, Folder, Settings, Plus, Trash, Upload, Download, 
-  FileText, X, Server, LogOut, RefreshCw, FolderPlus,
+  FileText, X, Server, LogOut, RefreshCw, FolderPlus, FilePlus,
   Archive, Expand, Edit2, Monitor, ArrowUp, Lock, Edit3,
   Zap, Save, CheckSquare, Square, Key, Shield
 } from 'lucide-react';
@@ -28,21 +28,193 @@ interface Session extends SavedSessionState {
 
 // --- Components ---
 
-const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-lg" }: { isOpen: boolean; onClose: () => void; title: string; children?: React.ReactNode, maxWidth?: string }) => {
+const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-lg", hideClose = false }: { isOpen: boolean; onClose: () => void; title: string; children?: React.ReactNode, maxWidth?: string, hideClose?: boolean }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className={cn("bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full overflow-hidden flex flex-col max-h-[90vh]", maxWidth)}>
         <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-950/50 shrink-0">
           <h3 className="text-lg font-semibold text-slate-200">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors p-1 hover:bg-slate-800 rounded">
-            <X size={20} />
-          </button>
+          {!hideClose && (
+            <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors p-1 hover:bg-slate-800 rounded">
+              <X size={20} />
+            </button>
+          )}
         </div>
         <div className="p-6 overflow-y-auto custom-scrollbar">
           {children}
         </div>
       </div>
+    </div>
+  );
+};
+
+// --- Permission Helper Component (Extracted to fix Hook Crash) ---
+
+const PermCheckbox = ({ label, checked, onChange }: { label: string, checked: boolean, onChange: (v: boolean) => void }) => (
+  <div className="flex flex-col items-center justify-center p-2 bg-slate-950 rounded border border-slate-800">
+    <span className="text-[10px] text-slate-500 mb-1 font-mono uppercase">{label}</span>
+    <button onClick={() => onChange(!checked)} className={cn("transition-colors", checked ? "text-indigo-400" : "text-slate-700")}>
+      {checked ? <CheckSquare size={18} /> : <Square size={18} />}
+    </button>
+  </div>
+);
+
+const PermissionsManager = ({ 
+  item, 
+  currentPath, 
+  sessionId, 
+  onClose, 
+  onRefresh 
+}: { 
+  item: FileEntry, 
+  currentPath: string, 
+  sessionId: string, 
+  onClose: () => void,
+  onRefresh: () => void
+}) => {
+  // Decode Octal
+  const currentOctal = item.attrs.mode.toString(8).slice(-3);
+  const [own, grp, pub] = currentOctal.split('').map(Number);
+
+  // State for Checkboxes
+  const [perms, setPerms] = useState({
+    own: { r: (own & 4) > 0, w: (own & 2) > 0, x: (own & 1) > 0 },
+    grp: { r: (grp & 4) > 0, w: (grp & 2) > 0, x: (grp & 1) > 0 },
+    pub: { r: (pub & 4) > 0, w: (pub & 2) > 0, x: (pub & 1) > 0 },
+  });
+  
+  const [permRecursive, setPermRecursive] = useState(false);
+
+  const calculateOctal = () => {
+    const getDigit = (p: {r: boolean, w: boolean, x: boolean}) => (p.r ? 4 : 0) + (p.w ? 2 : 0) + (p.x ? 1 : 0);
+    return `${getDigit(perms.own)}${getDigit(perms.grp)}${getDigit(perms.pub)}`;
+  };
+
+  const updatePerm = (cat: 'own'|'grp'|'pub', type: 'r'|'w'|'x', val: boolean) => {
+    setPerms(prev => ({ ...prev, [cat]: { ...prev[cat], [type]: val } }));
+  };
+
+  const handleApply = async () => {
+    try {
+      const octal = parseInt(calculateOctal(), 8);
+      const targetPath = `${currentPath}/${item.filename}`;
+      
+      if (permRecursive && item.isDirectory) {
+        // Use Exec for recursive
+        await window.electron?.sshExec(sessionId, `chmod -R ${calculateOctal()} "${targetPath}"`);
+      } else {
+        await window.electron?.sftpChmod(sessionId, targetPath, octal);
+      }
+      onRefresh();
+      onClose();
+    } catch (e: any) {
+      alert(`Permission Update Failed: ${e.message}`);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-4 gap-4 text-center">
+        <div className="col-span-1"></div>
+        <div className="text-sm font-semibold text-slate-400">Read</div>
+        <div className="text-sm font-semibold text-slate-400">Write</div>
+        <div className="text-sm font-semibold text-slate-400">Execute</div>
+
+        {/* Owner */}
+        <div className="flex items-center text-sm font-bold text-slate-200">Owner</div>
+        <PermCheckbox label="R" checked={perms.own.r} onChange={v => updatePerm('own', 'r', v)} />
+        <PermCheckbox label="W" checked={perms.own.w} onChange={v => updatePerm('own', 'w', v)} />
+        <PermCheckbox label="X" checked={perms.own.x} onChange={v => updatePerm('own', 'x', v)} />
+
+        {/* Group */}
+        <div className="flex items-center text-sm font-bold text-slate-200">Group</div>
+        <PermCheckbox label="R" checked={perms.grp.r} onChange={v => updatePerm('grp', 'r', v)} />
+        <PermCheckbox label="W" checked={perms.grp.w} onChange={v => updatePerm('grp', 'w', v)} />
+        <PermCheckbox label="X" checked={perms.grp.x} onChange={v => updatePerm('grp', 'x', v)} />
+
+        {/* Public */}
+        <div className="flex items-center text-sm font-bold text-slate-200">Public</div>
+        <PermCheckbox label="R" checked={perms.pub.r} onChange={v => updatePerm('pub', 'r', v)} />
+        <PermCheckbox label="W" checked={perms.pub.w} onChange={v => updatePerm('pub', 'w', v)} />
+        <PermCheckbox label="X" checked={perms.pub.x} onChange={v => updatePerm('pub', 'x', v)} />
+      </div>
+
+      <div className="flex items-center justify-between bg-slate-950 p-4 rounded-lg border border-slate-800">
+        <div className="flex items-center gap-3">
+            <span className="text-sm text-slate-400">Numeric Value:</span>
+            <span className="font-mono text-xl text-indigo-400 font-bold">{calculateOctal()}</span>
+        </div>
+        {item.isDirectory && (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500" checked={permRecursive} onChange={e => setPermRecursive(e.target.checked)} />
+            <span className="text-sm text-slate-300">Apply recursively</span>
+          </label>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+          <button onClick={handleApply} className="px-6 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium shadow-lg shadow-indigo-500/20">
+            Apply Permissions
+          </button>
+      </div>
+    </div>
+  );
+};
+
+// --- Editor Component ---
+
+const FileEditor = ({ 
+  file, 
+  sessionId, 
+  onClose,
+  onRefresh
+}: { 
+  file: {path: string, content: string}, 
+  sessionId: string, 
+  onClose: () => void,
+  onRefresh: () => void
+}) => {
+  const [content, setContent] = useState(file.content);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await window.electron?.sftpWriteFile(sessionId, file.path, content);
+      onRefresh();
+      onClose();
+    } catch (e: any) {
+      alert(`Save Failed: ${e.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col animate-in slide-in-from-bottom-5 duration-200">
+       <div className="h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 shadow-md">
+          <div className="flex items-center gap-3">
+             <FileText className="text-indigo-400" size={18} />
+             <span className="font-mono text-sm text-slate-300">{file.path}</span>
+          </div>
+          <div className="flex gap-3">
+             <button onClick={onClose} className="px-4 py-2 text-sm font-medium hover:text-white text-slate-400 transition-colors">Cancel</button>
+             <button disabled={saving} onClick={handleSave} className="flex items-center gap-2 px-6 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50">
+               {saving ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />} 
+               Save Changes
+             </button>
+          </div>
+       </div>
+       <div className="flex-1 relative">
+         <textarea 
+           className="absolute inset-0 w-full h-full bg-[#0d1117] text-slate-200 font-mono text-[13px] p-6 outline-none resize-none leading-relaxed"
+           value={content}
+           onChange={e => setContent(e.target.value)}
+           spellCheck={false}
+         />
+       </div>
     </div>
   );
 };
@@ -74,11 +246,9 @@ const SessionView = ({ session, visible, onRemove, onUpdateState }: {
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   
   // SFTP Modals
-  const [showEditor, setShowEditor] = useState(false);
   const [editingFile, setEditingFile] = useState<{path: string, content: string} | null>(null);
   const [showRename, setShowRename] = useState<{item: FileEntry, name: string} | null>(null);
-  const [showPermissions, setShowPermissions] = useState<{item: FileEntry, mode: number} | null>(null);
-  const [permRecursive, setPermRecursive] = useState(false);
+  const [showPermissions, setShowPermissions] = useState<FileEntry | null>(null);
 
   // Load Quick Commands
   useEffect(() => {
@@ -126,7 +296,7 @@ const SessionView = ({ session, visible, onRemove, onUpdateState }: {
           lineHeight: 1.4,
           cursorBlink: true,
           allowProposedApi: true,
-          convertEol: true, // Fixes the "staircase" effect
+          convertEol: true, 
         });
         
         const fitAddon = new FitAddon();
@@ -291,16 +461,14 @@ const SessionView = ({ session, visible, onRemove, onUpdateState }: {
     }
   };
 
-  // --- Permission Helper ---
-  
-  const PermCheckbox = ({ label, checked, onChange }: { label: string, checked: boolean, onChange: (v: boolean) => void }) => (
-    <div className="flex flex-col items-center justify-center p-2 bg-slate-950 rounded border border-slate-800">
-      <span className="text-[10px] text-slate-500 mb-1 font-mono uppercase">{label}</span>
-      <button onClick={() => onChange(!checked)} className={cn("transition-colors", checked ? "text-indigo-400" : "text-slate-700")}>
-        {checked ? <CheckSquare size={18} /> : <Square size={18} />}
-      </button>
-    </div>
-  );
+  const openEditor = async (file: FileEntry) => {
+    try {
+      const content = await window.electron?.sftpReadFile(session.id, `${currentPath}/${file.filename}`);
+      setEditingFile({ path: `${currentPath}/${file.filename}`, content });
+    } catch (e: any) {
+      alert(`Could not open file: ${e.message}`);
+    }
+  }
 
   return (
     <div className={cn("absolute inset-0 flex flex-col bg-slate-950", visible ? "z-10" : "z-0 invisible")}>
@@ -401,7 +569,13 @@ const SessionView = ({ session, visible, onRemove, onUpdateState }: {
               <div className="h-6 w-px bg-slate-800 mx-1" />
               
               <div className="flex gap-1">
-                 <button onClick={() => handleAction(async () => {
+                  <button onClick={() => handleAction(async () => {
+                      const name = prompt("File name:");
+                      if(name) await window.electron?.sftpWriteFile(session.id, currentPath === '/' ? `/${name}` : `${currentPath}/${name}`, "");
+                  }, "Create File Failed")} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50">
+                    <FilePlus size={14} /> New File
+                  </button>
+                  <button onClick={() => handleAction(async () => {
                       const name = prompt("Folder name:");
                       if(name) await window.electron?.sftpCreateFolder(session.id, currentPath === '/' ? `/${name}` : `${currentPath}/${name}`);
                   }, "Create Folder Failed")} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50">
@@ -429,17 +603,7 @@ const SessionView = ({ session, visible, onRemove, onUpdateState }: {
                    <tr 
                       key={i} 
                       className="hover:bg-slate-800/40 group transition-colors cursor-pointer"
-                      onDoubleClick={() => file.isDirectory ? handleNavigate(file.filename) : handleAction(async () => {
-                          // Check if text based
-                          const ext = file.filename.split('.').pop()?.toLowerCase();
-                          const isText = ['txt', 'js', 'ts', 'tsx', 'json', 'md', 'html', 'css', 'conf', 'cfg', 'log', 'sh', 'py', 'env', 'xml', 'yaml', 'yml'].includes(ext || '');
-                          
-                          if (isText || confirm("This file might not be text. Open editor anyway?")) {
-                              const content = await window.electron?.sftpReadFile(session.id, `${currentPath}/${file.filename}`);
-                              setEditingFile({ path: `${currentPath}/${file.filename}`, content });
-                              setShowEditor(true);
-                          }
-                      }, "Read Failed")}
+                      onDoubleClick={() => file.isDirectory ? handleNavigate(file.filename) : openEditor(file)}
                    >
                      <td className="p-3 pl-6">
                        {file.isDirectory ? <Folder size={16} className="text-indigo-400 fill-indigo-400/10" /> : <FileText size={16} className="text-slate-600" />}
@@ -456,8 +620,11 @@ const SessionView = ({ session, visible, onRemove, onUpdateState }: {
                      <td className="p-3 text-right pr-6">
                         <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                            {/* Context Actions */}
+                           {!file.isDirectory && (
+                             <button onClick={(e) => { e.stopPropagation(); openEditor(file); }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Edit File"><Edit2 size={14} /></button>
+                           )}
                            <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Rename"><Edit3 size={14} /></button>
-                           <button onClick={(e) => { e.stopPropagation(); setShowPermissions({item: file, mode: file.attrs.mode}) }} className="p-1.5 hover:bg-slate-700 hover:text-amber-300 text-slate-500 rounded" title="Permissions"><Lock size={14} /></button>
+                           <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1.5 hover:bg-slate-700 hover:text-amber-300 text-slate-500 rounded" title="Permissions"><Lock size={14} /></button>
                            
                            {(file.filename.endsWith('.tar.gz') || file.filename.endsWith('.zip')) ? (
                              <button onClick={(e) => { e.stopPropagation(); window.electron?.sshExec(session.id, `cd "${currentPath}" && ${file.filename.endsWith('.zip') ? 'unzip' : 'tar -xzf'} "${file.filename}"`).then(() => refreshFiles(session.id, currentPath)); }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-400 text-slate-500 rounded" title="Extract"><Expand size={14} /></button>
@@ -480,32 +647,13 @@ const SessionView = ({ session, visible, onRemove, onUpdateState }: {
       </div>
 
       {/* Built-in Editor Modal */}
-      {showEditor && editingFile && (
-        <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col animate-in slide-in-from-bottom-5 duration-200">
-           <div className="h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 shadow-md">
-              <div className="flex items-center gap-3">
-                 <FileText className="text-indigo-400" size={18} />
-                 <span className="font-mono text-sm text-slate-300">{editingFile.path}</span>
-              </div>
-              <div className="flex gap-3">
-                 <button onClick={() => setShowEditor(false)} className="px-4 py-2 text-sm font-medium hover:text-white text-slate-400 transition-colors">Cancel</button>
-                 <button onClick={() => handleAction(async () => {
-                   await window.electron?.sftpWriteFile(session.id, editingFile.path, editingFile.content);
-                   setShowEditor(false);
-                 }, "Save Failed")} className="flex items-center gap-2 px-6 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg shadow-indigo-500/20 transition-all">
-                   <Save size={16} /> Save Changes
-                 </button>
-              </div>
-           </div>
-           <div className="flex-1 relative">
-             <textarea 
-               className="absolute inset-0 w-full h-full bg-[#0d1117] text-slate-200 font-mono text-[13px] p-6 outline-none resize-none leading-relaxed"
-               value={editingFile.content}
-               onChange={e => setEditingFile({ ...editingFile, content: e.target.value })}
-               spellCheck={false}
-             />
-           </div>
-        </div>
+      {editingFile && (
+        <FileEditor 
+          file={editingFile}
+          sessionId={session.id}
+          onClose={() => setEditingFile(null)}
+          onRefresh={() => refreshFiles(session.id, currentPath)}
+        />
       )}
 
       {/* Rename Modal */}
@@ -532,91 +680,17 @@ const SessionView = ({ session, visible, onRemove, onUpdateState }: {
           )}
       </Modal>
 
-      {/* Advanced Permission Manager */}
+      {/* Advanced Permission Manager (Refactored) */}
       <Modal isOpen={!!showPermissions} onClose={() => setShowPermissions(null)} title="Permissions Manager" maxWidth="max-w-xl">
-          {showPermissions && (() => {
-             // Decode Octal
-             const currentOctal = showPermissions.mode.toString(8).slice(-3);
-             const [own, grp, pub] = currentOctal.split('').map(Number);
-
-             // State for Checkboxes
-             const [perms, setPerms] = useState({
-               own: { r: (own & 4) > 0, w: (own & 2) > 0, x: (own & 1) > 0 },
-               grp: { r: (grp & 4) > 0, w: (grp & 2) > 0, x: (grp & 1) > 0 },
-               pub: { r: (pub & 4) > 0, w: (pub & 2) > 0, x: (pub & 1) > 0 },
-             });
-             
-             // Calculate Octal from State
-             const calculateOctal = () => {
-                const getDigit = (p: {r: boolean, w: boolean, x: boolean}) => (p.r ? 4 : 0) + (p.w ? 2 : 0) + (p.x ? 1 : 0);
-                return `${getDigit(perms.own)}${getDigit(perms.grp)}${getDigit(perms.pub)}`;
-             }
-             
-             const updatePerm = (cat: 'own'|'grp'|'pub', type: 'r'|'w'|'x', val: boolean) => {
-               setPerms(prev => ({ ...prev, [cat]: { ...prev[cat], [type]: val } }));
-             }
-
-             return (
-               <div className="space-y-6">
-                 <div className="grid grid-cols-4 gap-4 text-center">
-                    <div className="col-span-1"></div>
-                    <div className="text-sm font-semibold text-slate-400">Read</div>
-                    <div className="text-sm font-semibold text-slate-400">Write</div>
-                    <div className="text-sm font-semibold text-slate-400">Execute</div>
-
-                    {/* Owner */}
-                    <div className="flex items-center text-sm font-bold text-slate-200">Owner</div>
-                    <PermCheckbox label="R" checked={perms.own.r} onChange={v => updatePerm('own', 'r', v)} />
-                    <PermCheckbox label="W" checked={perms.own.w} onChange={v => updatePerm('own', 'w', v)} />
-                    <PermCheckbox label="X" checked={perms.own.x} onChange={v => updatePerm('own', 'x', v)} />
-
-                    {/* Group */}
-                    <div className="flex items-center text-sm font-bold text-slate-200">Group</div>
-                    <PermCheckbox label="R" checked={perms.grp.r} onChange={v => updatePerm('grp', 'r', v)} />
-                    <PermCheckbox label="W" checked={perms.grp.w} onChange={v => updatePerm('grp', 'w', v)} />
-                    <PermCheckbox label="X" checked={perms.grp.x} onChange={v => updatePerm('grp', 'x', v)} />
-
-                    {/* Public */}
-                    <div className="flex items-center text-sm font-bold text-slate-200">Public</div>
-                    <PermCheckbox label="R" checked={perms.pub.r} onChange={v => updatePerm('pub', 'r', v)} />
-                    <PermCheckbox label="W" checked={perms.pub.w} onChange={v => updatePerm('pub', 'w', v)} />
-                    <PermCheckbox label="X" checked={perms.pub.x} onChange={v => updatePerm('pub', 'x', v)} />
-                 </div>
-
-                 <div className="flex items-center justify-between bg-slate-950 p-4 rounded-lg border border-slate-800">
-                    <div className="flex items-center gap-3">
-                       <span className="text-sm text-slate-400">Numeric Value:</span>
-                       <span className="font-mono text-xl text-indigo-400 font-bold">{calculateOctal()}</span>
-                    </div>
-                    {showPermissions.item.isDirectory && (
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500" checked={permRecursive} onChange={e => setPermRecursive(e.target.checked)} />
-                        <span className="text-sm text-slate-300">Apply recursively</span>
-                      </label>
-                    )}
-                 </div>
-
-                 <div className="flex justify-end gap-2 pt-2">
-                     <button type="button" onClick={() => setShowPermissions(null)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-                     <button onClick={() => handleAction(async () => {
-                         const octal = parseInt(calculateOctal(), 8);
-                         const targetPath = `${currentPath}/${showPermissions.item.filename}`;
-                         
-                         if (permRecursive && showPermissions.item.isDirectory) {
-                           // Use Exec for recursive
-                           await window.electron?.sshExec(session.id, `chmod -R ${calculateOctal()} "${targetPath}"`);
-                         } else {
-                           await window.electron?.sftpChmod(session.id, targetPath, octal);
-                         }
-                         setShowPermissions(null);
-                         setPermRecursive(false);
-                     }, "Update Failed")} className="px-6 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium shadow-lg shadow-indigo-500/20">
-                       Apply Permissions
-                     </button>
-                 </div>
-               </div>
-             );
-          })()}
+          {showPermissions && (
+            <PermissionsManager 
+               item={showPermissions}
+               currentPath={currentPath}
+               sessionId={session.id}
+               onClose={() => setShowPermissions(null)}
+               onRefresh={() => refreshFiles(session.id, currentPath)}
+            />
+          )}
       </Modal>
     </div>
   );
@@ -729,6 +803,18 @@ export default function App() {
     setEditingConnection(null);
   };
 
+  const handleManagerClose = () => {
+    // If we are editing, we just want to go back to the list
+    if (editingConnection) {
+        setEditingConnection(null);
+        return;
+    }
+    // If we are in list view, and we have sessions, we can close
+    if (sessions.length > 0) {
+        setManagerOpen(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30">
       
@@ -803,8 +889,10 @@ export default function App() {
       {/* --- Connection Manager Modal --- */}
       <Modal 
         isOpen={isManagerOpen} 
-        onClose={() => sessions.length > 0 && setManagerOpen(false)} 
+        onClose={handleManagerClose} 
         title={editingConnection ? (editingConnection.id ? "Edit Connection" : "New Connection") : "Connection Manager"}
+        // Hide close button if we are in list view and have NO sessions (forced to pick one)
+        hideClose={!editingConnection && sessions.length === 0}
       >
         {!editingConnection ? (
           // LIST VIEW
