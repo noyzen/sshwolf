@@ -151,7 +151,7 @@ ipcMain.handle('ssh-connect', async (event, config) => {
       readyTimeout: 20000,
       keepaliveInterval: 1000,
       tryKeyboard: true,
-      debug: (msg: string) => console.log(msg) // Optional: for debugging
+      // debug: (msg: string) => console.log(msg) // REMOVED TO PREVENT SPAM
     };
 
     if (config.password) {

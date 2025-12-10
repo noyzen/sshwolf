@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { 
   Terminal, Folder, Settings, Plus, Trash, Upload, Download, 
   FileText, X, Server, LogOut, RefreshCw, FolderPlus, FilePlus,
   Archive, Expand, Edit2, Monitor, ArrowUp, Lock, Edit3,
-  Zap, Save, CheckSquare, Square, Key, Shield
+  Zap, Save, CheckSquare, Square, Key, Shield, Type, WrapText,
+  Minus, AlignLeft
 } from 'lucide-react';
 import { SSHConnection, FileEntry, SavedSessionState, QuickCommand } from './types';
 import clsx from 'clsx';
@@ -49,7 +51,7 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-lg", hideCl
   );
 };
 
-// --- Permission Helper Component (Extracted to fix Hook Crash) ---
+// --- Permission Helper Component ---
 
 const PermCheckbox = ({ label, checked, onChange }: { label: string, checked: boolean, onChange: (v: boolean) => void }) => (
   <div className="flex flex-col items-center justify-center p-2 bg-slate-950 rounded border border-slate-800">
@@ -163,7 +165,7 @@ const PermissionsManager = ({
   );
 };
 
-// --- Editor Component ---
+// --- Editor Component (Refined) ---
 
 const FileEditor = ({ 
   file, 
@@ -178,13 +180,16 @@ const FileEditor = ({
 }) => {
   const [content, setContent] = useState(file.content);
   const [saving, setSaving] = useState(false);
+  const [fontSize, setFontSize] = useState(14);
+  const [wordWrap, setWordWrap] = useState(false);
+  const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSave = async () => {
     setSaving(true);
     try {
       await window.electron?.sftpWriteFile(sessionId, file.path, content);
       onRefresh();
-      onClose();
     } catch (e: any) {
       alert(`Save Failed: ${e.message}`);
     } finally {
@@ -192,30 +197,101 @@ const FileEditor = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col animate-in slide-in-from-bottom-5 duration-200">
-       <div className="h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 shadow-md">
-          <div className="flex items-center gap-3">
-             <FileText className="text-indigo-400" size={18} />
-             <span className="font-mono text-sm text-slate-300">{file.path}</span>
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const target = e.target as HTMLTextAreaElement;
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
+      const newValue = content.substring(0, start) + "  " + content.substring(end);
+      setContent(newValue);
+      setTimeout(() => {
+        target.selectionStart = target.selectionEnd = start + 2;
+      }, 0);
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      handleSave();
+    }
+  };
+
+  const updateCursor = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+     const target = e.target as HTMLTextAreaElement;
+     const val = target.value.substr(0, target.selectionStart);
+     const line = val.split(/\r\n|\r|\n/).length;
+     const col = target.selectionStart - val.lastIndexOf('\n');
+     setCursorPos({ line, col });
+  };
+
+  const handleReload = async () => {
+      if(confirm('Discard changes and reload?')) {
+         try {
+             const fresh = await window.electron?.sftpReadFile(sessionId, file.path);
+             if(fresh) setContent(fresh);
+         } catch(e: any) { alert(e.message) }
+      }
+  };
+
+  // Use Portal to escape parent container constraints and z-index issues
+  return createPortal(
+    <div className="fixed inset-0 z-[100] bg-[#1e1e1e] flex flex-col animate-in fade-in duration-200 font-sans">
+       {/* Toolbar */}
+       <div className="h-12 bg-[#252526] border-b border-[#3e3e42] flex items-center justify-between px-4 shadow-sm shrink-0">
+          <div className="flex items-center gap-4 overflow-hidden">
+             <div className="flex items-center gap-2 text-slate-300">
+                <FileText className="text-[#4fc1ff]" size={18} />
+                <span className="font-mono text-xs truncate max-w-[300px]">{file.path}</span>
+             </div>
+             <div className="h-4 w-px bg-[#3e3e42]" />
+             {/* Editor Controls */}
+             <div className="flex items-center gap-1">
+                 <button onClick={() => setFontSize(s => Math.max(10, s-1))} className="p-1.5 hover:bg-[#3e3e42] rounded text-slate-400" title="Decrease Font"><Minus size={14} /></button>
+                 <span className="text-xs text-slate-500 w-6 text-center">{fontSize}</span>
+                 <button onClick={() => setFontSize(s => Math.min(24, s+1))} className="p-1.5 hover:bg-[#3e3e42] rounded text-slate-400" title="Increase Font"><Plus size={14} /></button>
+                 <div className="h-4 w-px bg-[#3e3e42] mx-1" />
+                 <button onClick={() => setWordWrap(!wordWrap)} className={cn("p-1.5 rounded transition-colors", wordWrap ? "bg-[#3e3e42] text-white" : "text-slate-400 hover:bg-[#3e3e42]")} title="Toggle Word Wrap"><WrapText size={14} /></button>
+                 <button onClick={handleReload} className="p-1.5 rounded text-slate-400 hover:bg-[#3e3e42]" title="Reload File"><RefreshCw size={14} /></button>
+             </div>
           </div>
-          <div className="flex gap-3">
-             <button onClick={onClose} className="px-4 py-2 text-sm font-medium hover:text-white text-slate-400 transition-colors">Cancel</button>
-             <button disabled={saving} onClick={handleSave} className="flex items-center gap-2 px-6 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50">
-               {saving ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />} 
-               Save Changes
+          <div className="flex gap-2">
+             <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-300 hover:bg-[#3e3e42] rounded transition-colors">Close</button>
+             <button disabled={saving} onClick={handleSave} className="flex items-center gap-2 px-4 py-1.5 text-xs bg-[#007acc] hover:bg-[#0062a3] text-white rounded transition-all disabled:opacity-50">
+               {saving ? <RefreshCw className="animate-spin" size={12} /> : <Save size={12} />} 
+               Save
              </button>
           </div>
        </div>
-       <div className="flex-1 relative">
+       
+       {/* Editor Area */}
+       <div className="flex-1 relative bg-[#1e1e1e]">
          <textarea 
-           className="absolute inset-0 w-full h-full bg-[#0d1117] text-slate-200 font-mono text-[13px] p-6 outline-none resize-none leading-relaxed"
+           ref={textAreaRef}
+           className={cn(
+               "absolute inset-0 w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono p-4 outline-none resize-none leading-relaxed custom-scrollbar border-none",
+               wordWrap ? "whitespace-pre-wrap" : "whitespace-pre"
+           )}
+           style={{ fontSize: `${fontSize}px` }}
            value={content}
-           onChange={e => setContent(e.target.value)}
+           onChange={e => { setContent(e.target.value); updateCursor(e); }}
+           onClick={updateCursor}
+           onKeyUp={updateCursor}
+           onKeyDown={handleKeyDown}
            spellCheck={false}
          />
        </div>
-    </div>
+
+       {/* Status Bar */}
+       <div className="h-6 bg-[#007acc] text-white text-[11px] flex items-center px-4 justify-between select-none">
+           <div className="flex gap-4">
+               <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
+               <span>UTF-8</span>
+           </div>
+           <div>
+               {content.split('\n').length} Lines
+           </div>
+       </div>
+    </div>,
+    document.body
   );
 };
 
@@ -646,7 +722,7 @@ const SessionView = ({ session, visible, onRemove, onUpdateState }: {
         </div>
       </div>
 
-      {/* Built-in Editor Modal */}
+      {/* Built-in Editor Modal (PORTAL) */}
       {editingFile && (
         <FileEditor 
           file={editingFile}
