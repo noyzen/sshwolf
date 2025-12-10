@@ -319,6 +319,49 @@ ipcMain.handle('sftp-download', async (event, { connectionId, remoteFile }) => {
   });
 });
 
+ipcMain.handle('sftp-download-batch', async (event, { connectionId, remoteFiles }) => {
+  if (!mainWindow) return;
+  // remoteFiles is array of { path: string, filename: string, isDirectory: boolean }
+  
+  const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory', 'promptToCreate']
+  });
+
+  if (filePaths.length === 0) return { success: false, cancelled: true };
+  const targetDir = filePaths[0];
+
+  const conn = sshClients[connectionId];
+  if (!conn) throw new Error('Not connected');
+
+  return new Promise((resolve, reject) => {
+    conn.sftp((err, sftp) => {
+      if (err) { reject(err); return; }
+
+      let processed = 0;
+      // Filter out directories for now as recursive download is complex
+      const filesOnly = remoteFiles.filter((f: any) => !f.isDirectory);
+      
+      if (filesOnly.length === 0) {
+        sftp.end();
+        resolve({ success: true, message: 'No files to download' });
+        return;
+      }
+
+      filesOnly.forEach((file: any) => {
+        const localPath = path.join(targetDir, file.filename);
+        sftp.fastGet(file.path, localPath, (err) => {
+           processed++;
+           if (processed === filesOnly.length) {
+             sftp.end();
+             resolve({ success: true });
+           }
+        });
+      });
+    });
+  });
+});
+
+
 ipcMain.handle('sftp-delete', async (event, { connectionId, path: remotePath, isDirectory }) => {
   const conn = sshClients[connectionId];
   if (!conn) throw new Error('Not connected');

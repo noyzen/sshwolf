@@ -7,9 +7,9 @@ import {
   Archive, Expand, Edit2, Monitor, ArrowUp, Lock, Edit3,
   Zap, Save, CheckSquare, Square, Key, Shield, Type, WrapText,
   Minus, AlignLeft, AlertTriangle, Search, History, Play, Star,
-  Loader2, Copy, Scissors, Clipboard
+  Loader2, Copy, Scissors, Clipboard, LayoutGrid, List, Check
 } from 'lucide-react';
-import { SSHConnection, FileEntry, ServerSession, SubTab, QuickCommand, ClipboardState } from './types';
+import { SSHConnection, FileEntry, ServerSession, SubTab, QuickCommand, ClipboardState, ClipboardItem } from './types';
 import clsx from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -542,6 +542,9 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number>(-1);
   
   // Modals
   const [showRename, setShowRename] = useState<{item: FileEntry, name: string} | null>(null);
@@ -552,6 +555,8 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
 
   const refreshFiles = useCallback(async (path: string) => {
     setIsLoading(true);
+    setSelected(new Set());
+    setLastSelectedIndex(-1);
     try {
       const list = await window.electron?.sftpList(subTab.connectionId, path);
       if (list) {
@@ -591,6 +596,21 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
+  // Handle hotkeys (Ctrl+A)
+  useEffect(() => {
+    if (!visible) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        // Select all
+        const all = new Set(files.map(f => f.filename));
+        setSelected(all);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [visible, files]);
+
   const handleNavigate = (folderName: string) => {
     const newPath = currentPath === '/' ? `/${folderName}` : `${currentPath}/${folderName}`;
     refreshFiles(newPath);
@@ -608,6 +628,37 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
     onOpenFile(`${currentPath}/${file.filename}`);
   };
 
+  // Selection Logic
+  const handleSelect = (file: FileEntry, index: number, e: React.MouseEvent) => {
+    // If not holding ctrl/shift, regular click should clear unless we are clicking inside a selection to drag (not implemented)
+    // Here we implement standard explorer behavior
+    
+    // e.stopPropagation() is handled in the wrapper
+    const filename = file.filename;
+    let newSelected = new Set(selected);
+
+    if (e.ctrlKey || e.metaKey) {
+        if (newSelected.has(filename)) newSelected.delete(filename);
+        else newSelected.add(filename);
+        setLastSelectedIndex(index);
+    } else if (e.shiftKey && lastSelectedIndex !== -1) {
+        const start = Math.min(lastSelectedIndex, index);
+        const end = Math.max(lastSelectedIndex, index);
+        // Add range, but usually Shift+Click replaces selection from anchor. 
+        // We will clear and add range to mimic standard behavior unless Ctrl is also held (handled above)
+        newSelected = new Set();
+        for (let i = start; i <= end; i++) {
+            newSelected.add(files[i].filename);
+        }
+    } else {
+        // Single click -> Select only this one
+        // Note: Right click usually selects but preserves others if already selected. We are using left click.
+        newSelected = new Set([filename]);
+        setLastSelectedIndex(index);
+    }
+    setSelected(newSelected);
+  };
+
   // Helper actions
   const handleCreateFile = async (name: string) => {
     if (!name || !name.trim()) return;
@@ -616,7 +667,7 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
         await window.electron?.sftpWriteFile(subTab.connectionId, targetPath, "");
         refreshFiles(currentPath);
         setShowNewFile(false);
-        onOpenFile(targetPath); // Auto open new file
+        onOpenFile(targetPath);
     } catch (e: any) {
         alert(`Failed to create file: ${e.message}`);
     }
@@ -634,28 +685,89 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
     }
   };
 
-  const handleCopy = (item: FileEntry) => {
+  const getSelectedFiles = () => files.filter(f => selected.has(f.filename));
+
+  const handleCopy = () => {
+      const selection = getSelectedFiles();
+      if (selection.length === 0) return;
+
+      const items: ClipboardItem[] = selection.map(f => ({
+          path: currentPath === '/' ? `/${f.filename}` : `${currentPath}/${f.filename}`,
+          filename: f.filename,
+          isDirectory: f.isDirectory
+      }));
+      
       setClipboard({
           op: 'copy',
           connectionId: subTab.connectionId,
-          items: [{
-              path: currentPath === '/' ? `/${item.filename}` : `${currentPath}/${item.filename}`,
-              filename: item.filename,
-              isDirectory: item.isDirectory
-          }]
+          items
       });
   };
 
-  const handleCut = (item: FileEntry) => {
+  const handleCut = () => {
+      const selection = getSelectedFiles();
+      if (selection.length === 0) return;
+
+      const items: ClipboardItem[] = selection.map(f => ({
+          path: currentPath === '/' ? `/${f.filename}` : `${currentPath}/${f.filename}`,
+          filename: f.filename,
+          isDirectory: f.isDirectory
+      }));
+
       setClipboard({
           op: 'cut',
           connectionId: subTab.connectionId,
-          items: [{
-              path: currentPath === '/' ? `/${item.filename}` : `${currentPath}/${item.filename}`,
-              filename: item.filename,
-              isDirectory: item.isDirectory
-          }]
+          items
       });
+  };
+
+  const handleDelete = async () => {
+      const selection = getSelectedFiles();
+      if (selection.length === 0) return;
+      
+      if (!confirm(`Are you sure you want to delete ${selection.length} item(s)?`)) return;
+
+      setIsLoading(true);
+      try {
+          for (const file of selection) {
+             const path = currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`;
+             await window.electron?.sftpDelete(subTab.connectionId, path, file.isDirectory);
+          }
+          refreshFiles(currentPath);
+      } catch (e: any) {
+          alert(`Delete failed: ${e.message}`);
+          refreshFiles(currentPath); // Refresh anyway to show partial success
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  const handleDownload = async () => {
+      const selection = getSelectedFiles();
+      if (selection.length === 0) return;
+
+      // Filter out directories for batch download if backend doesn't support recursive
+      // The backend sftp-download-batch currently handles files.
+      // We will warn if folders are selected.
+      const filesOnly = selection.filter(f => !f.isDirectory);
+      if (filesOnly.length === 0 && selection.length > 0) {
+          alert("Folder download is not supported in batch mode yet.");
+          return;
+      }
+      
+      const payload = filesOnly.map(f => ({
+          path: currentPath === '/' ? `/${f.filename}` : `${currentPath}/${f.filename}`,
+          filename: f.filename,
+          isDirectory: false
+      }));
+
+      try {
+          await window.electron?.sftpDownloadBatch(subTab.connectionId, payload);
+      } catch (e: any) {
+          if (!e.message?.includes('cancelled')) {
+              alert(`Download failed: ${e.message}`);
+          }
+      }
   };
 
   const handlePaste = async () => {
@@ -685,12 +797,9 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
               if (clipboard.op === 'cut') {
                   // Check if same location
                   if (item.path === destPath) continue;
-                  
                   await window.electron?.sftpRename(subTab.connectionId, item.path, destPath);
               } else {
                   // Copy
-                  // Use shell cp command
-                  // Improve escaping for shell compatibility
                   const escape = (p: string) => p.replace(/(["'$`\\])/g,'\\$1');
                   const cmd = `cp -r "${escape(item.path)}" "${escape(destPath)}"`;
                   const result = await window.electron?.sshExec(subTab.connectionId, cmd);
@@ -712,9 +821,9 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#020617]">
+    <div className="flex flex-col h-full bg-[#020617] relative" onClick={() => setSelected(new Set())}>
        {/* Address Bar */}
-       <div className="h-12 border-b border-slate-800 flex items-center px-4 gap-3 bg-slate-950/50">
+       <div className="h-12 border-b border-slate-800 flex items-center px-4 gap-3 bg-slate-950/50 shrink-0" onClick={e => e.stopPropagation()}>
           <div className="flex gap-1">
              <button onClick={handleUpDir} disabled={currentPath === '/'} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white disabled:opacity-30 transition-colors border border-slate-700/50"><ArrowUp size={16} /></button>
              <button onClick={() => refreshFiles(currentPath)} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors border border-slate-700/50"><RefreshCw size={16} className={isLoading ? "animate-spin" : ""} /></button>
@@ -722,9 +831,17 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
           <form onSubmit={(e) => { e.preventDefault(); refreshFiles(pathInput); }} className="flex-1">
              <input type="text" value={pathInput} onChange={(e) => setPathInput(e.target.value)} className="w-full bg-slate-900 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 font-mono transition-all" />
           </form>
+          
           <div className="h-6 w-px bg-slate-800 mx-1" />
-          <button onClick={() => onOpenTerminal(currentPath)} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-indigo-400 transition-colors border border-slate-700/50" title="Open Terminal Here"><Terminal size={16} /></button>
+          
+          {/* View Toggle */}
+          <div className="flex bg-slate-900 rounded-lg border border-slate-800 p-0.5">
+             <button onClick={() => setViewMode('list')} className={cn("p-1.5 rounded-md transition-all", viewMode === 'list' ? "bg-slate-700 text-indigo-400 shadow-sm" : "text-slate-500 hover:text-slate-300")} title="List View"><List size={16}/></button>
+             <button onClick={() => setViewMode('grid')} className={cn("p-1.5 rounded-md transition-all", viewMode === 'grid' ? "bg-slate-700 text-indigo-400 shadow-sm" : "text-slate-500 hover:text-slate-300")} title="Grid View"><LayoutGrid size={16}/></button>
+          </div>
+
           <div className="h-6 w-px bg-slate-800 mx-1" />
+          
           <div className="flex gap-1">
               <button 
                 onClick={handlePaste} 
@@ -735,55 +852,130 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
                  {isPasting ? <Loader2 size={14} className="animate-spin"/> : <Clipboard size={14} />} 
                  Paste
               </button>
-              <div className="w-px h-6 bg-slate-800 mx-1"></div>
               <button onClick={() => setShowNewFile(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FilePlus size={14} /> New File</button>
               <button onClick={() => setShowNewFolder(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FolderPlus size={14} /> New Folder</button>
               <button onClick={async () => { await window.electron?.sftpUpload(subTab.connectionId, currentPath); refreshFiles(currentPath); }} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 hover:text-indigo-300 rounded-lg text-xs font-medium transition-colors border border-indigo-500/20"><Upload size={14} /> Upload</button>
           </div>
        </div>
-       
-       {/* File List */}
-       <div className="flex-1 overflow-auto custom-scrollbar bg-[#020617]">
-         <table className="w-full text-left text-xs border-separate border-spacing-0">
-           <thead className="bg-slate-900/80 text-slate-500 sticky top-0 z-10 backdrop-blur-sm shadow-sm">
-             <tr>
-               <th className="p-3 pl-6 w-10 border-b border-slate-800">Type</th>
-               <th className="p-3 border-b border-slate-800">Name</th>
-               <th className="p-3 w-24 border-b border-slate-800">Size</th>
-               <th className="p-3 w-24 border-b border-slate-800">Perms</th>
-               <th className="p-3 w-48 text-right pr-6 border-b border-slate-800">Actions</th>
-             </tr>
-           </thead>
-           <tbody className="divide-y divide-slate-800/30">
-             {files.map((file, i) => {
-                 const fullPath = currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`;
-                 const isCut = clipboard?.op === 'cut' && clipboard.items.some(it => it.path === fullPath);
-                 
-                 return (
-                   <tr key={i} className={cn("hover:bg-slate-800/40 group transition-colors cursor-pointer", isCut && "opacity-50")} onDoubleClick={() => file.isDirectory ? handleNavigate(file.filename) : openEditor(file)}>
-                     <td className="p-3 pl-6">{file.isDirectory ? <Folder size={16} className="text-indigo-400 fill-indigo-400/10" /> : <FileText size={16} className="text-slate-600" />}</td>
-                     <td className="p-3 font-medium text-slate-300 group-hover:text-indigo-200">{file.filename}</td>
-                     <td className="p-3 text-slate-500 font-mono">{file.isDirectory ? '-' : (file.attrs.size < 1024 ? file.attrs.size + ' B' : (file.attrs.size / 1024).toFixed(1) + ' KB')}</td>
-                     <td className="p-3 text-slate-500 font-mono text-[10px] uppercase">{file.attrs.mode.toString(8).slice(-3)}</td>
-                     <td className="p-3 text-right pr-6">
-                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                           <button onClick={(e) => { e.stopPropagation(); handleCopy(file); }} className="p-1.5 hover:bg-slate-700 hover:text-sky-300 text-slate-500 rounded" title="Copy"><Copy size={14} /></button>
-                           <button onClick={(e) => { e.stopPropagation(); handleCut(file); }} className="p-1.5 hover:bg-slate-700 hover:text-amber-300 text-slate-500 rounded" title="Cut"><Scissors size={14} /></button>
-                           
-                           <div className="w-px h-4 bg-slate-800 mx-1 my-auto"></div>
 
-                           {!file.isDirectory && <button onClick={(e) => { e.stopPropagation(); openEditor(file); }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Edit"><Edit2 size={14} /></button>}
-                           <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Rename"><Edit3 size={14} /></button>
-                           <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1.5 hover:bg-slate-700 hover:text-amber-300 text-slate-500 rounded" title="Permissions"><Lock size={14} /></button>
-                           {!file.isDirectory && <button onClick={(e) => { e.stopPropagation(); window.electron?.sftpDownload(subTab.connectionId, `${currentPath}/${file.filename}`) }} className="p-1.5 hover:bg-slate-700 hover:text-emerald-400 text-slate-500 rounded" title="Download"><Download size={14} /></button>}
-                           <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) window.electron?.sftpDelete(subTab.connectionId, `${currentPath}/${file.filename}`, file.isDirectory).then(() => refreshFiles(currentPath)); }} className="p-1.5 hover:bg-slate-700 hover:text-red-400 text-slate-500 rounded" title="Delete"><Trash size={14} /></button>
-                        </div>
-                     </td>
-                   </tr>
-                 );
-             })}
-           </tbody>
-         </table>
+       {/* Bulk Actions Bar */}
+       {selected.size > 0 && (
+           <div className="absolute top-14 left-4 right-4 z-20 flex items-center justify-between bg-indigo-900/90 border border-indigo-500/30 backdrop-blur-md text-white px-4 py-2 rounded-lg shadow-xl animate-in slide-in-from-top-2 duration-200" onClick={e => e.stopPropagation()}>
+               <div className="flex items-center gap-3">
+                   <div className="bg-indigo-500/20 p-1.5 rounded-full"><Check size={14} className="text-indigo-300"/></div>
+                   <span className="text-sm font-medium">{selected.size} selected</span>
+               </div>
+               <div className="flex items-center gap-2">
+                   <button onClick={handleCopy} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Copy"><Copy size={16} /></button>
+                   <button onClick={handleCut} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Cut"><Scissors size={16} /></button>
+                   <div className="w-px h-4 bg-white/20 mx-1"></div>
+                   <button onClick={handleDownload} className="flex items-center gap-2 px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs font-medium transition-colors"><Download size={14} /> Download</button>
+                   <button onClick={handleDelete} className="flex items-center gap-2 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded text-xs font-medium transition-colors border border-red-500/20"><Trash size={14} /> Delete</button>
+                   <button onClick={() => setSelected(new Set())} className="ml-2 p-1 text-indigo-300 hover:text-white"><X size={16}/></button>
+               </div>
+           </div>
+       )}
+       
+       {/* File List / Grid */}
+       <div className="flex-1 overflow-auto custom-scrollbar bg-[#020617] p-2" onClick={() => setSelected(new Set())}>
+         {viewMode === 'list' ? (
+             <table className="w-full text-left text-xs border-separate border-spacing-0">
+               <thead className="bg-slate-900/80 text-slate-500 sticky top-0 z-10 backdrop-blur-sm shadow-sm">
+                 <tr>
+                   <th className="p-3 pl-4 w-10 border-b border-slate-800 text-center">
+                      <div className="w-4 h-4 border border-slate-700 rounded bg-slate-900" />
+                   </th>
+                   <th className="p-3 border-b border-slate-800">Name</th>
+                   <th className="p-3 w-24 border-b border-slate-800">Size</th>
+                   <th className="p-3 w-24 border-b border-slate-800">Perms</th>
+                   <th className="p-3 w-32 text-right pr-6 border-b border-slate-800">Actions</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-800/30">
+                 {files.map((file, i) => {
+                     const isSelected = selected.has(file.filename);
+                     const fullPath = currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`;
+                     const isCut = clipboard?.op === 'cut' && clipboard.items.some(it => it.path === fullPath);
+                     
+                     return (
+                       <tr 
+                         key={file.filename} 
+                         onClick={(e) => handleSelect(file, i, e)}
+                         onDoubleClick={(e) => { e.stopPropagation(); file.isDirectory ? handleNavigate(file.filename) : openEditor(file) }}
+                         className={cn(
+                             "group transition-colors cursor-pointer select-none", 
+                             isSelected ? "bg-indigo-900/20 hover:bg-indigo-900/30" : "hover:bg-slate-800/40",
+                             isCut && "opacity-50"
+                         )} 
+                       >
+                         <td className="p-3 pl-4 text-center">
+                             {isSelected ? <CheckSquare size={16} className="text-indigo-400 mx-auto" /> : (
+                                file.isDirectory ? <Folder size={16} className="text-indigo-400 fill-indigo-400/10 mx-auto" /> : <FileText size={16} className="text-slate-600 mx-auto" />
+                             )}
+                         </td>
+                         <td className={cn("p-3 font-medium", isSelected ? "text-indigo-200" : "text-slate-300")}>{file.filename}</td>
+                         <td className="p-3 text-slate-500 font-mono">{file.isDirectory ? '-' : (file.attrs.size < 1024 ? file.attrs.size + ' B' : (file.attrs.size / 1024).toFixed(1) + ' KB')}</td>
+                         <td className="p-3 text-slate-500 font-mono text-[10px] uppercase">{file.attrs.mode.toString(8).slice(-3)}</td>
+                         <td className="p-3 text-right pr-6">
+                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                               {/* Keep individual actions for quick access even in list mode */}
+                               {!file.isDirectory && <button onClick={(e) => { e.stopPropagation(); openEditor(file); }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Edit"><Edit2 size={14} /></button>}
+                               <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Rename"><Edit3 size={14} /></button>
+                               <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1.5 hover:bg-slate-700 hover:text-amber-300 text-slate-500 rounded" title="Permissions"><Lock size={14} /></button>
+                            </div>
+                         </td>
+                       </tr>
+                     );
+                 })}
+               </tbody>
+             </table>
+         ) : (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-2 p-2">
+                 {files.map((file, i) => {
+                     const isSelected = selected.has(file.filename);
+                     const fullPath = currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`;
+                     const isCut = clipboard?.op === 'cut' && clipboard.items.some(it => it.path === fullPath);
+                     
+                     return (
+                         <div 
+                             key={file.filename}
+                             onClick={(e) => handleSelect(file, i, e)}
+                             onDoubleClick={(e) => { e.stopPropagation(); file.isDirectory ? handleNavigate(file.filename) : openEditor(file) }}
+                             className={cn(
+                                 "flex flex-col items-center p-3 rounded-xl cursor-pointer transition-all border select-none group relative",
+                                 isSelected 
+                                    ? "bg-indigo-600/20 border-indigo-500/50 shadow-lg shadow-indigo-900/20" 
+                                    : "bg-slate-900/30 border-transparent hover:bg-slate-800 hover:border-slate-700",
+                                 isCut && "opacity-50"
+                             )}
+                         >
+                             <div className="mb-3 relative">
+                                 {file.isDirectory ? (
+                                     <Folder size={48} className={cn("fill-current transition-colors", isSelected ? "text-indigo-400" : "text-slate-600 group-hover:text-indigo-400")} />
+                                 ) : (
+                                     <FileText size={48} className={cn("transition-colors", isSelected ? "text-slate-200" : "text-slate-700 group-hover:text-slate-500")} />
+                                 )}
+                                 {isSelected && (
+                                     <div className="absolute -top-1 -right-1 bg-indigo-500 rounded-full p-0.5 border border-slate-900">
+                                         <Check size={10} className="text-white" />
+                                     </div>
+                                 )}
+                             </div>
+                             <span className={cn("text-xs text-center w-full break-words line-clamp-2 leading-tight font-medium", isSelected ? "text-indigo-200" : "text-slate-400 group-hover:text-slate-300")}>
+                                 {file.filename}
+                             </span>
+                             
+                             {/* Context buttons for grid items - only show a few essential ones on hover if single item */}
+                             {!isSelected && (
+                                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1">
+                                      <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1 bg-slate-950/80 hover:bg-indigo-600 text-slate-400 hover:text-white rounded shadow-sm"><Lock size={10}/></button>
+                                 </div>
+                             )}
+                         </div>
+                     );
+                 })}
+            </div>
+         )}
        </div>
        
        <Modal isOpen={!!showRename} onClose={() => setShowRename(null)} title="Rename File">
