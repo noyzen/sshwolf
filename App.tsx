@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
@@ -8,9 +9,9 @@ import {
   Archive, Expand, Edit2, Monitor, ArrowUp, Lock, Edit3,
   Zap, Save, CheckSquare, Square, Key, Shield, Type, WrapText,
   Minus, AlignLeft, AlertTriangle, Search, History, Play, Star,
-  Loader2
+  Loader2, Copy, Scissors, Clipboard
 } from 'lucide-react';
-import { SSHConnection, FileEntry, ServerSession, SubTab, QuickCommand } from './types';
+import { SSHConnection, FileEntry, ServerSession, SubTab, QuickCommand, ClipboardState } from './types';
 import clsx from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -526,7 +527,18 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
 
 // --- SFTP Pane ---
 
-const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, onOpenFile }: { subTab: SubTab, connection: SSHConnection, visible: boolean, onPathChange: (path: string) => void, onOpenTerminal: (path: string) => void, onOpenFile: (path: string) => void }) => {
+interface SFTPPaneProps {
+  subTab: SubTab;
+  connection: SSHConnection;
+  visible: boolean;
+  onPathChange: (path: string) => void;
+  onOpenTerminal: (path: string) => void;
+  onOpenFile: (path: string) => void;
+  clipboard: ClipboardState | null;
+  setClipboard: (state: ClipboardState | null) => void;
+}
+
+const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, onOpenFile, clipboard, setClipboard }: SFTPPaneProps) => {
   const [currentPath, setCurrentPath] = useState(subTab.path || '/');
   const [pathInput, setPathInput] = useState(currentPath);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -538,6 +550,7 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
   const [showPermissions, setShowPermissions] = useState<FileEntry | null>(null);
   const [showNewFile, setShowNewFile] = useState(false);
   const [showNewFolder, setShowNewFolder] = useState(false);
+  const [isPasting, setIsPasting] = useState(false);
 
   const refreshFiles = useCallback(async (path: string) => {
     setIsLoading(true);
@@ -623,6 +636,83 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
     }
   };
 
+  const handleCopy = (item: FileEntry) => {
+      setClipboard({
+          op: 'copy',
+          connectionId: subTab.connectionId,
+          items: [{
+              path: currentPath === '/' ? `/${item.filename}` : `${currentPath}/${item.filename}`,
+              filename: item.filename,
+              isDirectory: item.isDirectory
+          }]
+      });
+  };
+
+  const handleCut = (item: FileEntry) => {
+      setClipboard({
+          op: 'cut',
+          connectionId: subTab.connectionId,
+          items: [{
+              path: currentPath === '/' ? `/${item.filename}` : `${currentPath}/${item.filename}`,
+              filename: item.filename,
+              isDirectory: item.isDirectory
+          }]
+      });
+  };
+
+  const handlePaste = async () => {
+      if (!clipboard || clipboard.items.length === 0) return;
+      if (clipboard.connectionId !== subTab.connectionId) {
+          alert("Cross-connection paste not currently supported. Please use Download/Upload.");
+          return;
+      }
+      
+      setIsPasting(true);
+      try {
+          for (const item of clipboard.items) {
+              const destDir = currentPath === '/' ? '' : currentPath;
+              let destPath = `${destDir}/${item.filename}`;
+              
+              // Handle name collision in same dir for copy
+              if (item.path === destPath && clipboard.op === 'copy') {
+                 // Append ' copy'
+                 const extIndex = item.filename.lastIndexOf('.');
+                 if (extIndex > 0) {
+                     destPath = `${destDir}/${item.filename.substring(0, extIndex)} copy${item.filename.substring(extIndex)}`;
+                 } else {
+                     destPath = `${destDir}/${item.filename} copy`;
+                 }
+              }
+
+              if (clipboard.op === 'cut') {
+                  // Check if same location
+                  if (item.path === destPath) continue;
+                  
+                  await window.electron?.sftpRename(subTab.connectionId, item.path, destPath);
+              } else {
+                  // Copy
+                  // Use shell cp command
+                  // Escape double quotes in paths
+                  const escape = (p: string) => p.replace(/"/g, '\\"');
+                  const cmd = `cp -r "${escape(item.path)}" "${escape(destPath)}"`;
+                  const result = await window.electron?.sshExec(subTab.connectionId, cmd);
+                  if (result && result.code !== 0) {
+                      throw new Error(`Copy failed: ${result.stderr}`);
+                  }
+              }
+          }
+          
+          if (clipboard.op === 'cut') {
+              setClipboard(null);
+          }
+          await refreshFiles(currentPath);
+      } catch (e: any) {
+          alert(`Paste failed: ${e.message}`);
+      } finally {
+          setIsPasting(false);
+      }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#020617]">
        {/* Address Bar */}
@@ -638,6 +728,16 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
           <button onClick={() => onOpenTerminal(currentPath)} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-indigo-400 transition-colors border border-slate-700/50" title="Open Terminal Here"><Terminal size={16} /></button>
           <div className="h-6 w-px bg-slate-800 mx-1" />
           <div className="flex gap-1">
+              <button 
+                onClick={handlePaste} 
+                disabled={!clipboard || isPasting || clipboard.connectionId !== subTab.connectionId}
+                className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-slate-800/50 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50" 
+                title="Paste from clipboard"
+              >
+                 {isPasting ? <Loader2 size={14} className="animate-spin"/> : <Clipboard size={14} />} 
+                 Paste
+              </button>
+              <div className="w-px h-6 bg-slate-800 mx-1"></div>
               <button onClick={() => setShowNewFile(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FilePlus size={14} /> New File</button>
               <button onClick={() => setShowNewFolder(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FolderPlus size={14} /> New Folder</button>
               <button onClick={async () => { await window.electron?.sftpUpload(subTab.connectionId, currentPath); refreshFiles(currentPath); }} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 hover:text-indigo-300 rounded-lg text-xs font-medium transition-colors border border-indigo-500/20"><Upload size={14} /> Upload</button>
@@ -657,23 +757,33 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
              </tr>
            </thead>
            <tbody className="divide-y divide-slate-800/30">
-             {files.map((file, i) => (
-               <tr key={i} className="hover:bg-slate-800/40 group transition-colors cursor-pointer" onDoubleClick={() => file.isDirectory ? handleNavigate(file.filename) : openEditor(file)}>
-                 <td className="p-3 pl-6">{file.isDirectory ? <Folder size={16} className="text-indigo-400 fill-indigo-400/10" /> : <FileText size={16} className="text-slate-600" />}</td>
-                 <td className="p-3 font-medium text-slate-300 group-hover:text-indigo-200">{file.filename}</td>
-                 <td className="p-3 text-slate-500 font-mono">{file.isDirectory ? '-' : (file.attrs.size < 1024 ? file.attrs.size + ' B' : (file.attrs.size / 1024).toFixed(1) + ' KB')}</td>
-                 <td className="p-3 text-slate-500 font-mono text-[10px] uppercase">{file.attrs.mode.toString(8).slice(-3)}</td>
-                 <td className="p-3 text-right pr-6">
-                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                       {!file.isDirectory && <button onClick={(e) => { e.stopPropagation(); openEditor(file); }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Edit"><Edit2 size={14} /></button>}
-                       <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Rename"><Edit3 size={14} /></button>
-                       <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1.5 hover:bg-slate-700 hover:text-amber-300 text-slate-500 rounded" title="Permissions"><Lock size={14} /></button>
-                       {!file.isDirectory && <button onClick={(e) => { e.stopPropagation(); window.electron?.sftpDownload(subTab.connectionId, `${currentPath}/${file.filename}`) }} className="p-1.5 hover:bg-slate-700 hover:text-emerald-400 text-slate-500 rounded" title="Download"><Download size={14} /></button>}
-                       <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) window.electron?.sftpDelete(subTab.connectionId, `${currentPath}/${file.filename}`, file.isDirectory).then(() => refreshFiles(currentPath)); }} className="p-1.5 hover:bg-slate-700 hover:text-red-400 text-slate-500 rounded" title="Delete"><Trash size={14} /></button>
-                    </div>
-                 </td>
-               </tr>
-             ))}
+             {files.map((file, i) => {
+                 const fullPath = currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`;
+                 const isCut = clipboard?.op === 'cut' && clipboard.items.some(it => it.path === fullPath);
+                 
+                 return (
+                   <tr key={i} className={cn("hover:bg-slate-800/40 group transition-colors cursor-pointer", isCut && "opacity-50")} onDoubleClick={() => file.isDirectory ? handleNavigate(file.filename) : openEditor(file)}>
+                     <td className="p-3 pl-6">{file.isDirectory ? <Folder size={16} className="text-indigo-400 fill-indigo-400/10" /> : <FileText size={16} className="text-slate-600" />}</td>
+                     <td className="p-3 font-medium text-slate-300 group-hover:text-indigo-200">{file.filename}</td>
+                     <td className="p-3 text-slate-500 font-mono">{file.isDirectory ? '-' : (file.attrs.size < 1024 ? file.attrs.size + ' B' : (file.attrs.size / 1024).toFixed(1) + ' KB')}</td>
+                     <td className="p-3 text-slate-500 font-mono text-[10px] uppercase">{file.attrs.mode.toString(8).slice(-3)}</td>
+                     <td className="p-3 text-right pr-6">
+                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                           <button onClick={(e) => { e.stopPropagation(); handleCopy(file); }} className="p-1.5 hover:bg-slate-700 hover:text-sky-300 text-slate-500 rounded" title="Copy"><Copy size={14} /></button>
+                           <button onClick={(e) => { e.stopPropagation(); handleCut(file); }} className="p-1.5 hover:bg-slate-700 hover:text-amber-300 text-slate-500 rounded" title="Cut"><Scissors size={14} /></button>
+                           
+                           <div className="w-px h-4 bg-slate-800 mx-1 my-auto"></div>
+
+                           {!file.isDirectory && <button onClick={(e) => { e.stopPropagation(); openEditor(file); }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Edit"><Edit2 size={14} /></button>}
+                           <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Rename"><Edit3 size={14} /></button>
+                           <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1.5 hover:bg-slate-700 hover:text-amber-300 text-slate-500 rounded" title="Permissions"><Lock size={14} /></button>
+                           {!file.isDirectory && <button onClick={(e) => { e.stopPropagation(); window.electron?.sftpDownload(subTab.connectionId, `${currentPath}/${file.filename}`) }} className="p-1.5 hover:bg-slate-700 hover:text-emerald-400 text-slate-500 rounded" title="Download"><Download size={14} /></button>}
+                           <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) window.electron?.sftpDelete(subTab.connectionId, `${currentPath}/${file.filename}`, file.isDirectory).then(() => refreshFiles(currentPath)); }} className="p-1.5 hover:bg-slate-700 hover:text-red-400 text-slate-500 rounded" title="Delete"><Trash size={14} /></button>
+                        </div>
+                     </td>
+                   </tr>
+                 );
+             })}
            </tbody>
          </table>
        </div>
@@ -713,7 +823,7 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
 
 // --- Session View (Server Tab) ---
 
-const SessionView = ({ session, visible, onUpdate, onClose }: { session: ServerSession, visible: boolean, onUpdate: (s: ServerSession) => void, onClose: () => void }) => {
+const SessionView = ({ session, visible, onUpdate, onClose, clipboard, setClipboard }: { session: ServerSession, visible: boolean, onUpdate: (s: ServerSession) => void, onClose: () => void, clipboard: ClipboardState | null, setClipboard: (s: ClipboardState | null) => void }) => {
   
   const addSubTab = (type: 'terminal' | 'sftp' | 'editor', path?: string) => {
     let title = 'Files';
@@ -804,6 +914,8 @@ const SessionView = ({ session, visible, onUpdate, onClose }: { session: ServerS
                      onPathChange={(path) => updateSubTab(tab.id, { path, title: path })}
                      onOpenTerminal={(path) => addSubTab('terminal', path)}
                      onOpenFile={(path) => addSubTab('editor', path)}
+                     clipboard={clipboard}
+                     setClipboard={setClipboard}
                    />
                 )}
             </div>
@@ -853,6 +965,9 @@ export default function App() {
   const [isManagerOpen, setManagerOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<Partial<SSHConnection> | null>(null);
   const [authType, setAuthType] = useState<'password'|'key'>('password');
+  
+  // Global Clipboard State
+  const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
 
   // Initial Check
   useEffect(() => {
@@ -989,6 +1104,8 @@ export default function App() {
                 visible={activeSessionId === session.id} 
                 onUpdate={(updated) => setServerSessions(prev => prev.map(s => s.id === updated.id ? updated : s))}
                 onClose={() => closeServerSession(session.id)}
+                clipboard={clipboard}
+                setClipboard={setClipboard}
               />
            </div>
         ))}

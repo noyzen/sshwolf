@@ -1,4 +1,5 @@
 
+
 export interface SSHConnection {
   id: string;
   name: string;
@@ -46,6 +47,18 @@ export interface ServerSession {
   connection: SSHConnection;
   subTabs: SubTab[];
   activeSubTabId: string | null;
+}
+
+export interface ClipboardItem {
+  path: string;
+  filename: string;
+  isDirectory: boolean;
+}
+
+export interface ClipboardState {
+  op: 'copy' | 'cut';
+  connectionId: string;
+  items: ClipboardItem[];
 }
 
 // For persistence
