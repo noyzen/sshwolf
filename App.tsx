@@ -14,6 +14,10 @@ function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
 }
 
+// OS Detection
+const isMac = navigator.userAgent.includes('Mac');
+const isWindows = navigator.userAgent.includes('Windows');
+
 // --- Components ---
 
 const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children?: React.ReactNode }) => {
@@ -291,8 +295,11 @@ export default function App() {
   if (view === 'connections') {
     return (
       <div className="flex h-screen bg-slate-950 text-slate-200">
-        {/* Sidebar */}
-        <div className="w-20 lg:w-64 bg-slate-950 border-r border-slate-800 flex flex-col items-center lg:items-start p-4 no-drag titlebar pt-8">
+        {/* Sidebar - Made draggable by removing no-drag and keeping titlebar */}
+        <div className={cn(
+          "w-20 lg:w-64 bg-slate-950 border-r border-slate-800 flex flex-col items-center lg:items-start p-4 titlebar",
+          isMac ? "pt-12" : "pt-8" // Add space for Mac traffic lights
+        )}>
           <div className="flex items-center gap-3 mb-8 px-2">
             <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
               <Terminal className="text-white" size={24} />
@@ -444,7 +451,11 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-200">
       {/* Header */}
-      <header className="h-14 bg-slate-950 border-b border-slate-800 flex items-center justify-between px-4 no-drag titlebar">
+      <header className={cn(
+        "h-14 bg-slate-950 border-b border-slate-800 flex items-center justify-between px-4 titlebar", 
+        isMac && "pl-20", // Move content right on Mac for traffic lights
+        isWindows && "pr-40" // Move content left on Windows for window controls
+      )}>
         <div className="flex items-center gap-4">
            <div className="font-bold text-lg flex items-center gap-2">
              <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]"></div>
