@@ -5,6 +5,9 @@ import fs from 'fs';
 
 // Note: __dirname is available globally in CommonJS, provided @types/node is installed.
 
+// Suppress extraneous logs (Windows networking, etc)
+app.commandLine.appendSwitch('log-level', '3');
+
 let mainWindow: BrowserWindow | null = null;
 const sshClients: Record<string, Client> = {};
 
@@ -29,7 +32,8 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+    // Using detach mode often prevents the "Autofill.enable" error
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }

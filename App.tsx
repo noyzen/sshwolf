@@ -295,9 +295,9 @@ export default function App() {
   if (view === 'connections') {
     return (
       <div className="flex h-screen bg-slate-950 text-slate-200">
-        {/* Sidebar - Made draggable by removing no-drag and keeping titlebar */}
+        {/* Sidebar - Removed titlebar class to prevent dragging from here */}
         <div className={cn(
-          "w-20 lg:w-64 bg-slate-950 border-r border-slate-800 flex flex-col items-center lg:items-start p-4 titlebar",
+          "w-20 lg:w-64 bg-slate-950 border-r border-slate-800 flex flex-col items-center lg:items-start p-4",
           isMac ? "pt-12" : "pt-8" // Add space for Mac traffic lights
         )}>
           <div className="flex items-center gap-3 mb-8 px-2">
@@ -308,11 +308,11 @@ export default function App() {
           </div>
           
           <nav className="flex-1 w-full space-y-2">
-            <button className="w-full flex items-center gap-3 p-3 rounded-lg bg-slate-900 text-indigo-400 border border-slate-800 transition-all no-drag">
+            <button className="w-full flex items-center gap-3 p-3 rounded-lg bg-slate-900 text-indigo-400 border border-slate-800 transition-all">
               <Server size={20} />
               <span className="hidden lg:block font-medium">Connections</span>
             </button>
-            <button className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-slate-900 text-slate-400 hover:text-slate-200 transition-all no-drag">
+            <button className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-slate-900 text-slate-400 hover:text-slate-200 transition-all">
               <Settings size={20} />
               <span className="hidden lg:block font-medium">Settings</span>
             </button>
@@ -320,21 +320,21 @@ export default function App() {
         </div>
 
         {/* Connection Grid */}
-        <div className="flex-1 p-8 overflow-y-auto no-drag">
-          <div className="flex justify-between items-center mb-8">
+        <div className="flex-1 p-8 overflow-y-auto titlebar">
+          <div className="flex justify-between items-center mb-8 no-drag">
             <h2 className="text-2xl font-bold">Saved Connections</h2>
             <button 
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors font-medium shadow-lg shadow-indigo-500/20 no-drag"
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors font-medium shadow-lg shadow-indigo-500/20"
             >
               <Plus size={20} />
               Add Connection
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 no-drag">
             {connections.map(conn => (
-              <div key={conn.id} className="group bg-slate-900/50 border border-slate-800 rounded-xl p-5 hover:border-indigo-500/50 transition-all no-drag relative overflow-hidden">
+              <div key={conn.id} className="group bg-slate-900/50 border border-slate-800 rounded-xl p-5 hover:border-indigo-500/50 transition-all relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                    <button 
                     onClick={(e) => {
