@@ -151,7 +151,6 @@ ipcMain.handle('ssh-connect', async (event, config) => {
       readyTimeout: 20000,
       keepaliveInterval: 1000,
       tryKeyboard: true,
-      // debug: (msg: string) => console.log(msg) // REMOVED TO PREVENT SPAM
     };
 
     if (config.password) {
@@ -326,10 +325,6 @@ ipcMain.handle('sftp-delete', async (event, { connectionId, path: remotePath, is
       };
 
       if (isDirectory) {
-        // Recursive delete is often handled better via shell command due to non-empty dirs,
-        // but for safety in SFTP we usually use rmdir which requires empty.
-        // For user convenience, we will use `rm -rf` via ssh exec if it's a directory
-        // This is a design choice for "Powerful" file manager.
         sftp.end();
         conn.exec(`rm -rf "${remotePath}"`, (err, stream) => {
              if (err) reject(err);
@@ -423,14 +418,10 @@ ipcMain.handle('sftp-write-file', async (event, { connectionId, path: remotePath
     conn.sftp((err, sftp) => {
       if (err) { reject(err); return; }
       const stream = sftp.createWriteStream(remotePath);
-      stream.write(content, (err) => {
-          if(err) {
-            sftp.end();
-            reject(err);
-            return;
-          }
-          stream.end();
-      });
+      
+      // Use end(content) to ensure data is written and stream is closed properly,
+      // even for empty content strings.
+      
       stream.on('close', () => {
         sftp.end();
         resolve({ success: true });
@@ -439,6 +430,8 @@ ipcMain.handle('sftp-write-file', async (event, { connectionId, path: remotePath
           sftp.end();
           reject(err);
       });
+
+      stream.end(content);
     });
   });
 });

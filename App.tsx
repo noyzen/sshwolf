@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Terminal as XTerm } from 'xterm';
@@ -8,7 +7,7 @@ import {
   FileText, X, Server, LogOut, RefreshCw, FolderPlus, FilePlus,
   Archive, Expand, Edit2, Monitor, ArrowUp, Lock, Edit3,
   Zap, Save, CheckSquare, Square, Key, Shield, Type, WrapText,
-  Minus, AlignLeft, AlertTriangle
+  Minus, AlignLeft, AlertTriangle, Search, History, Play, Star
 } from 'lucide-react';
 import { SSHConnection, FileEntry, ServerSession, SubTab, QuickCommand } from './types';
 import clsx from 'clsx';
@@ -224,28 +223,42 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
   
   // Quick Commands State
   const [quickCommands, setQuickCommands] = useState<QuickCommand[]>([]);
+  const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [showQuickCmds, setShowQuickCmds] = useState(false);
-  const [newCmdName, setNewCmdName] = useState('');
-  const [newCmdVal, setNewCmdVal] = useState('');
+  const [inputCmd, setInputCmd] = useState('');
+  const [searchFilter, setSearchFilter] = useState('');
 
   useEffect(() => {
     const saved = localStorage.getItem('quick-commands');
     if (saved) setQuickCommands(JSON.parse(saved));
+    
+    const savedHist = localStorage.getItem('cmd-history');
+    if (savedHist) setCmdHistory(JSON.parse(savedHist));
   }, []);
 
-  const saveQuickCommand = () => {
-    if (!newCmdName || !newCmdVal) return;
-    const newCmd = { id: crypto.randomUUID(), name: newCmdName, command: newCmdVal };
+  const saveQuickCommand = (name: string, cmd: string) => {
+    if (!name || !cmd) return;
+    const newCmd = { id: crypto.randomUUID(), name, command: cmd };
     const updated = [...quickCommands, newCmd];
     setQuickCommands(updated);
     localStorage.setItem('quick-commands', JSON.stringify(updated));
-    setNewCmdName(''); setNewCmdVal('');
   };
   
   const deleteQuickCommand = (id: string) => {
     const updated = quickCommands.filter(c => c.id !== id);
     setQuickCommands(updated);
     localStorage.setItem('quick-commands', JSON.stringify(updated));
+  };
+
+  const runCommand = (cmd: string, saveToHistory = true) => {
+      window.electron?.sshWrite(subTab.connectionId, cmd + '\r');
+      if (saveToHistory && cmd.trim()) {
+          const newHist = [cmd, ...cmdHistory.filter(c => c !== cmd)].slice(0, 50);
+          setCmdHistory(newHist);
+          localStorage.setItem('cmd-history', JSON.stringify(newHist));
+      }
+      setShowQuickCmds(false);
+      setInputCmd('');
   };
 
   useEffect(() => {
@@ -305,6 +318,15 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
           await window.electron?.sshConnect({ ...connection, id: subTab.connectionId, rows: term.rows, cols: term.cols });
           setIsConnected(true);
           fitAddon.fit();
+          
+          // Initial Path Navigation
+          if (subTab.path && subTab.path !== '/') {
+             setTimeout(() => {
+                 window.electron?.sshWrite(subTab.connectionId, `cd "${subTab.path}"\r`);
+                 window.electron?.sshWrite(subTab.connectionId, `clear\r`);
+             }, 800);
+          }
+
         } catch (err: any) {
           term.writeln(`\r\n\x1b[31mError: ${err.message}\x1b[0m`);
           setIsConnected(false);
@@ -332,6 +354,9 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
     }
   }, [visible]);
 
+  const filteredQuickCmds = quickCommands.filter(c => c.name.toLowerCase().includes(searchFilter.toLowerCase()) || c.command.toLowerCase().includes(searchFilter.toLowerCase()));
+  const filteredHistory = cmdHistory.filter(c => c.toLowerCase().includes(searchFilter.toLowerCase()));
+
   return (
     <div className="relative w-full h-full">
        <div ref={terminalRef} className="w-full h-full p-1" />
@@ -347,26 +372,64 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
                   <Zap size={16} />
                 </button>
                 {showQuickCmds && (
-                  <div className="absolute right-0 top-full mt-2 w-64 bg-slate-900 border border-slate-700 rounded-lg shadow-xl p-2 animate-in fade-in zoom-in-95 duration-200">
-                      <h4 className="text-xs font-semibold text-slate-500 mb-2 px-1">QUICK COMMANDS</h4>
-                      <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
-                          {quickCommands.map(qc => (
-                            <div key={qc.id} className="flex items-center justify-between group p-1.5 hover:bg-slate-800 rounded cursor-pointer" onClick={() => {
-                              window.electron?.sshWrite(subTab.connectionId, qc.command + '\r');
-                              setShowQuickCmds(false);
-                            }}>
-                              <span className="text-sm text-slate-300">{qc.name}</span>
-                              <button onClick={(e) => { e.stopPropagation(); deleteQuickCommand(qc.id) }} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400"><X size={12}/></button>
-                            </div>
-                          ))}
-                          {quickCommands.length === 0 && <p className="text-xs text-slate-600 p-2 italic">No commands saved.</p>}
-                      </div>
-                      <div className="border-t border-slate-800 mt-2 pt-2 space-y-2">
-                          <input placeholder="Name (e.g. htop)" className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white" value={newCmdName} onChange={e => setNewCmdName(e.target.value)} />
-                          <div className="flex gap-1">
-                            <input placeholder="Command" className="flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white" value={newCmdVal} onChange={e => setNewCmdVal(e.target.value)} />
-                            <button onClick={saveQuickCommand} className="bg-indigo-600 text-white rounded px-2 py-1 text-xs"><Plus size={12}/></button>
+                  <div className="absolute right-0 top-full mt-2 w-80 bg-slate-900 border border-slate-700 rounded-lg shadow-xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[500px]">
+                      
+                      {/* Header Input */}
+                      <div className="p-3 border-b border-slate-800 space-y-2 bg-slate-950/50 rounded-t-lg">
+                          <div className="relative">
+                              <Search size={14} className="absolute left-3 top-2.5 text-slate-500" />
+                              <input 
+                                autoFocus
+                                placeholder="Filter or Type new command..." 
+                                className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 pl-9 text-xs text-white focus:border-indigo-500 outline-none"
+                                value={inputCmd}
+                                onChange={e => { setInputCmd(e.target.value); setSearchFilter(e.target.value); }}
+                                onKeyDown={e => { if(e.key === 'Enter') runCommand(inputCmd); }}
+                              />
                           </div>
+                          <div className="flex gap-2">
+                             <button onClick={() => runCommand(inputCmd)} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><Play size={12}/> Run</button>
+                             <button onClick={() => saveQuickCommand(inputCmd, inputCmd)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><Save size={12}/> Save</button>
+                          </div>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-4">
+                          {/* Saved Commands */}
+                          {filteredQuickCmds.length > 0 && (
+                            <div>
+                                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Saved Commands</h4>
+                                <div className="space-y-1">
+                                    {filteredQuickCmds.map(qc => (
+                                        <div key={qc.id} className="flex items-center justify-between group p-2 hover:bg-slate-800 rounded cursor-pointer border border-transparent hover:border-slate-700" onClick={() => runCommand(qc.command, false)}>
+                                        <div className="flex flex-col overflow-hidden">
+                                            <span className="text-sm text-indigo-300 font-medium truncate">{qc.name}</span>
+                                            <span className="text-[10px] text-slate-500 font-mono truncate">{qc.command}</span>
+                                        </div>
+                                        <button onClick={(e) => { e.stopPropagation(); deleteQuickCommand(qc.id) }} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 p-1"><X size={12}/></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                          )}
+
+                          {/* History */}
+                          {filteredHistory.length > 0 && (
+                             <div>
+                                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1 flex items-center gap-2"><History size={10}/> Recent History</h4>
+                                <div className="space-y-1">
+                                    {filteredHistory.map((cmd, i) => (
+                                        <div key={i} className="flex items-center justify-between group p-2 hover:bg-slate-800 rounded cursor-pointer border border-transparent hover:border-slate-700" onClick={() => runCommand(cmd, false)}>
+                                            <span className="text-xs text-slate-400 font-mono truncate flex-1">{cmd}</span>
+                                            <button onClick={(e) => { e.stopPropagation(); saveQuickCommand(cmd, cmd); }} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-amber-400 p-1" title="Save to Quick Commands"><Star size={12}/></button>
+                                        </div>
+                                    ))}
+                                </div>
+                             </div>
+                          )}
+
+                          {filteredQuickCmds.length === 0 && filteredHistory.length === 0 && (
+                              <div className="text-center py-4 text-slate-600 text-xs italic">No commands found.</div>
+                          )}
                       </div>
                   </div>
                 )}
@@ -378,7 +441,7 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
 
 // --- SFTP Pane ---
 
-const SFTPPane = ({ subTab, connection, visible, onPathChange }: { subTab: SubTab, connection: SSHConnection, visible: boolean, onPathChange: (path: string) => void }) => {
+const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }: { subTab: SubTab, connection: SSHConnection, visible: boolean, onPathChange: (path: string) => void, onOpenTerminal: (path: string) => void }) => {
   const [currentPath, setCurrentPath] = useState(subTab.path || '/');
   const [pathInput, setPathInput] = useState(currentPath);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -462,6 +525,8 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange }: { subTab: SubTa
              <input type="text" value={pathInput} onChange={(e) => setPathInput(e.target.value)} className="w-full bg-slate-900 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 font-mono transition-all" />
           </form>
           <div className="h-6 w-px bg-slate-800 mx-1" />
+          <button onClick={() => onOpenTerminal(currentPath)} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-indigo-400 transition-colors border border-slate-700/50" title="Open Terminal Here"><Terminal size={16} /></button>
+          <div className="h-6 w-px bg-slate-800 mx-1" />
           <div className="flex gap-1">
               <button onClick={async () => { const name = prompt("File name:"); if(name) { await window.electron?.sftpWriteFile(subTab.connectionId, currentPath === '/' ? `/${name}` : `${currentPath}/${name}`, ""); refreshFiles(currentPath); } }} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FilePlus size={14} /> New File</button>
               <button onClick={async () => { const name = prompt("Folder name:"); if(name) { await window.electron?.sftpCreateFolder(subTab.connectionId, currentPath === '/' ? `/${name}` : `${currentPath}/${name}`); refreshFiles(currentPath); } }} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FolderPlus size={14} /> New Folder</button>
@@ -526,13 +591,13 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange }: { subTab: SubTa
 
 const SessionView = ({ session, visible, onUpdate, onClose }: { session: ServerSession, visible: boolean, onUpdate: (s: ServerSession) => void, onClose: () => void }) => {
   
-  const addSubTab = (type: 'terminal' | 'sftp') => {
+  const addSubTab = (type: 'terminal' | 'sftp', path?: string) => {
     const newTab: SubTab = {
       id: crypto.randomUUID(),
       type,
-      title: type === 'terminal' ? `Terminal ${session.subTabs.filter(t => t.type === 'terminal').length + 1}` : 'Files',
+      title: type === 'terminal' ? (path ? 'Terminal' : `Terminal ${session.subTabs.filter(t => t.type === 'terminal').length + 1}`) : 'Files',
       connectionId: crypto.randomUUID(), // Each subtab gets its own connection
-      path: '/'
+      path: path || '/'
     };
     onUpdate({
       ...session,
@@ -559,10 +624,7 @@ const SessionView = ({ session, visible, onUpdate, onClose }: { session: ServerS
     onUpdate({ ...session, subTabs: newTabs });
   };
 
-  if (!visible) return null; // We use CSS hiding for sub-tabs, but for Server Tabs we can just unmount or hide. 
-  // ACTUALLY, to keep connections alive, we must render but hide. 
-  // However, the Parent App component handles the mapping. 
-  // Here we just render. The Parent will use style={{display: none}} for the container of this SessionView.
+  if (!visible) return null; 
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -609,6 +671,7 @@ const SessionView = ({ session, visible, onUpdate, onClose }: { session: ServerS
                      connection={session.connection} 
                      visible={session.activeSubTabId === tab.id} 
                      onPathChange={(path) => updateSubTab(tab.id, { path, title: path })}
+                     onOpenTerminal={(path) => addSubTab('terminal', path)}
                    />
                 )}
             </div>
@@ -671,6 +734,14 @@ export default function App() {
   };
 
   const createServerSession = (conn: SSHConnection) => {
+    // Single Instance Check
+    const existing = serverSessions.find(s => s.connection.id === conn.id);
+    if (existing) {
+      setActiveSessionId(existing.id);
+      setManagerOpen(false);
+      return;
+    }
+
     // Default to one terminal
     const initialTab: SubTab = {
        id: crypto.randomUUID(),
