@@ -1,3 +1,4 @@
+
 export interface SSHConnection {
   id: string;
   name: string;
@@ -30,11 +31,28 @@ export interface QuickCommand {
   command: string;
 }
 
-export interface SavedSessionState {
+export type SubTabType = 'terminal' | 'sftp';
+
+export interface SubTab {
+  id: string;
+  type: SubTabType;
+  title: string;
+  connectionId: string; // Unique ID used for the backend connection
+  path?: string; // For SFTP to remember location
+}
+
+export interface ServerSession {
   id: string;
   connection: SSHConnection;
-  activeView: 'terminal' | 'sftp';
-  lastPath: string;
+  subTabs: SubTab[];
+  activeSubTabId: string | null;
+}
+
+// For persistence
+export interface SavedState {
+  connections: SSHConnection[];
+  sessions: ServerSession[];
+  quickCommands: QuickCommand[];
 }
 
 declare global {
