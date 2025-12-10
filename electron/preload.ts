@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('electron', {
   sftpDownload: (connectionId: string, remoteFile: string) => ipcRenderer.invoke('sftp-download', { connectionId, remoteFile }),
   sftpDelete: (connectionId: string, path: string, isDirectory: boolean) => ipcRenderer.invoke('sftp-delete', { connectionId, path, isDirectory }),
   sftpCreateFolder: (connectionId: string, path: string) => ipcRenderer.invoke('sftp-create-folder', { connectionId, path }),
+  sftpRename: (connectionId: string, oldPath: string, newPath: string) => ipcRenderer.invoke('sftp-rename', { connectionId, oldPath, newPath }),
+  sftpChmod: (connectionId: string, path: string, mode: number) => ipcRenderer.invoke('sftp-chmod', { connectionId, path, mode }),
   sftpReadFile: (connectionId: string, path: string) => ipcRenderer.invoke('sftp-read-file', { connectionId, path }),
   sftpWriteFile: (connectionId: string, path: string, content: string) => ipcRenderer.invoke('sftp-write-file', { connectionId, path, content }),
 });

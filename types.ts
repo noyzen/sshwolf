@@ -44,6 +44,8 @@ declare global {
       sftpDownload: (connectionId: string, remoteFile: string) => Promise<{ success: boolean; cancelled?: boolean }>;
       sftpDelete: (connectionId: string, path: string, isDirectory: boolean) => Promise<void>;
       sftpCreateFolder: (connectionId: string, path: string) => Promise<void>;
+      sftpRename: (connectionId: string, oldPath: string, newPath: string) => Promise<void>;
+      sftpChmod: (connectionId: string, path: string, mode: number) => Promise<void>;
       sftpReadFile: (connectionId: string, path: string) => Promise<string>;
       sftpWriteFile: (connectionId: string, path: string, content: string) => Promise<void>;
     }

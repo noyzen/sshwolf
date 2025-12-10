@@ -11,15 +11,47 @@ app.commandLine.appendSwitch('log-level', '3');
 let mainWindow: BrowserWindow | null = null;
 const sshClients: Record<string, Client> = {};
 
+// Window State Management
+const statePath = path.join(app.getPath('userData'), 'window-state.json');
+
+function loadWindowState() {
+  try {
+    if (fs.existsSync(statePath)) {
+      const data = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      return data;
+    }
+  } catch (e) {
+    console.error('Failed to load window state:', e);
+  }
+  return { width: 1200, height: 800 };
+}
+
+function saveWindowState() {
+  if (!mainWindow) return;
+  const bounds = mainWindow.getBounds();
+  try {
+    fs.writeFileSync(statePath, JSON.stringify(bounds));
+  } catch (e) {
+    console.error('Failed to save window state:', e);
+  }
+}
+
 function createWindow() {
+  const state = loadWindowState();
+
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    x: state.x,
+    y: state.y,
+    width: state.width,
+    height: state.height,
+    minWidth: 800,
+    minHeight: 600,
     backgroundColor: '#020617', // Slate 950
     titleBarStyle: 'hidden',
     titleBarOverlay: {
       color: '#020617',
-      symbolColor: '#e2e8f0'
+      symbolColor: '#e2e8f0',
+      height: 40 // Match the React titlebar height
     },
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -32,11 +64,14 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    // Using detach mode often prevents the "Autofill.enable" error
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+
+  mainWindow.on('close', () => {
+    saveWindowState();
+  });
 }
 
 app.whenReady().then(createWindow);
@@ -261,6 +296,38 @@ ipcMain.handle('sftp-create-folder', async (event, { connectionId, path: remoteP
     conn.sftp((err, sftp) => {
       if (err) { reject(err); return; }
       sftp.mkdir(remotePath, (err) => {
+        sftp.end();
+        if (err) reject(err);
+        else resolve({ success: true });
+      });
+    });
+  });
+});
+
+ipcMain.handle('sftp-rename', async (event, { connectionId, oldPath, newPath }) => {
+  const conn = sshClients[connectionId];
+  if (!conn) throw new Error('Not connected');
+
+  return new Promise((resolve, reject) => {
+    conn.sftp((err, sftp) => {
+      if (err) { reject(err); return; }
+      sftp.rename(oldPath, newPath, (err) => {
+        sftp.end();
+        if (err) reject(err);
+        else resolve({ success: true });
+      });
+    });
+  });
+});
+
+ipcMain.handle('sftp-chmod', async (event, { connectionId, path: remotePath, mode }) => {
+  const conn = sshClients[connectionId];
+  if (!conn) throw new Error('Not connected');
+
+  return new Promise((resolve, reject) => {
+    conn.sftp((err, sftp) => {
+      if (err) { reject(err); return; }
+      sftp.chmod(remotePath, mode, (err) => {
         sftp.end();
         if (err) reject(err);
         else resolve({ success: true });

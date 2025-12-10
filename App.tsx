@@ -4,7 +4,7 @@ import { FitAddon } from 'xterm-addon-fit';
 import { 
   Terminal, Folder, Settings, Plus, Trash, Upload, Download, 
   FileText, X, Server, LogOut, RefreshCw, FolderPlus,
-  Archive, Expand, Edit2, Monitor
+  Archive, Expand, Edit2, Monitor, ArrowUp, Lock, Edit3
 } from 'lucide-react';
 import { SSHConnection, FileEntry } from './types';
 import clsx from 'clsx';
@@ -60,10 +60,15 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
 
   // SFTP
   const [currentPath, setCurrentPath] = useState('/root');
+  const [pathInput, setPathInput] = useState('/root');
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  
+  // SFTP Modals
   const [showEditor, setShowEditor] = useState(false);
   const [editingFile, setEditingFile] = useState<{path: string, content: string} | null>(null);
+  const [showRename, setShowRename] = useState<{item: FileEntry, name: string} | null>(null);
+  const [showPermissions, setShowPermissions] = useState<{item: FileEntry, mode: string} | null>(null);
 
   // Initialize Connection
   useEffect(() => {
@@ -125,7 +130,7 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
         try {
           term.writeln(`\x1b[34mConnecting to ${session.connection.host}...\x1b[0m\r\n`);
           
-          // Connect using the SESSION ID, not the connection ID
+          // Connect using the SESSION ID
           await window.electron?.sshConnect({ ...session.connection, id: session.id });
           
           fitAddon.fit();
@@ -134,6 +139,7 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
           // Initial SFTP
           refreshFiles(session.id, '/root'); 
           setCurrentPath('/root');
+          setPathInput('/root');
 
         } catch (err: any) {
           term.writeln(`\r\n\x1b[31mError: ${err.message}\x1b[0m`);
@@ -156,7 +162,6 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
   // Handle Resize Visibility
   useEffect(() => {
     if (visible && fitAddonRef.current) {
-      // Small delay to allow layout to settle
       setTimeout(() => {
         fitAddonRef.current?.fit();
         if (xtermRef.current) {
@@ -166,7 +171,7 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
     }
   }, [visible]);
 
-  // --- SFTP Logic (Scoped to Session) ---
+  // --- SFTP Logic ---
 
   const refreshFiles = async (connId: string, path: string) => {
     setIsLoadingFiles(true);
@@ -179,9 +184,11 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
         });
         setFiles(sorted);
         setCurrentPath(path);
+        setPathInput(path);
       }
     } catch (err) {
       xtermRef.current?.writeln(`\r\nSFTP Error: ${err}`);
+      console.error(err);
     } finally {
       setIsLoadingFiles(false);
     }
@@ -200,6 +207,11 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
     refreshFiles(session.id, newPath);
   };
 
+  const handlePathSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    refreshFiles(session.id, pathInput);
+  };
+
   const handleAction = async (action: () => Promise<any>, errorMsg: string) => {
     try {
       await action();
@@ -212,7 +224,7 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
   return (
     <div className={cn("absolute inset-0 flex flex-col bg-slate-950", visible ? "z-10" : "z-0 invisible")}>
       {/* Session Toolbar */}
-      <div className="h-10 bg-slate-950 border-b border-slate-800 flex items-center justify-between px-4 shrink-0">
+      <div className="h-10 bg-slate-950 border-b border-slate-800 flex items-center justify-between px-4 shrink-0 shadow-sm z-20">
          <div className="flex items-center gap-4">
             <div className="flex p-0.5 bg-slate-900 rounded-lg border border-slate-800">
              <button 
@@ -229,15 +241,11 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
              </button>
            </div>
          </div>
-         {/* Breadcrumb for SFTP (Only visible in SFTP tab) */}
-         {activeTab === 'sftp' && (
-           <div className="flex-1 mx-4 overflow-hidden flex items-center justify-center">
-             <div className="flex items-center gap-1 text-xs font-mono text-slate-400 bg-slate-900/50 px-3 py-1 rounded border border-slate-800/50 truncate max-w-full">
-                <span className="text-indigo-400">sftp://{session.connection.host}</span>
-                <span className="text-slate-300">{currentPath}</span>
-             </div>
-           </div>
-         )}
+         {/* Status */}
+         <div className="flex items-center gap-2 text-xs text-slate-500 font-mono">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Connected to {session.connection.host}
+         </div>
       </div>
 
       <div className="flex-1 relative overflow-hidden">
@@ -248,71 +256,91 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
 
         {/* SFTP Layer */}
         <div className={cn("absolute inset-0 flex flex-col bg-[#020617] z-10", activeTab === 'sftp' ? "visible" : "invisible")}>
-           <div className="h-10 border-b border-slate-800 flex items-center px-2 gap-1 bg-slate-950/50">
-              <button onClick={() => refreshFiles(session.id, currentPath)} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors">
-                <RefreshCw size={16} className={isLoadingFiles ? "animate-spin" : ""} />
-              </button>
-              <button onClick={handleUpDir} disabled={currentPath === '/'} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white disabled:opacity-30 transition-colors">
-                 <div className="font-bold -mt-1 text-lg leading-none">..</div>
-              </button>
-              <div className="h-4 w-px bg-slate-800 mx-1" />
-              <button onClick={() => handleAction(async () => {
-                  const name = prompt("Folder name:");
-                  if(name) await window.electron?.sftpCreateFolder(session.id, currentPath === '/' ? `/${name}` : `${currentPath}/${name}`);
-              }, "Create Folder Failed")} className="flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 rounded text-xs text-slate-300 transition-colors">
-                <FolderPlus size={14} /> New Folder
-              </button>
-              <button onClick={() => handleAction(() => window.electron?.sftpUpload(session.id, currentPath), "Upload Failed")} className="flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 rounded text-xs text-slate-300 transition-colors">
-                <Upload size={14} /> Upload
-              </button>
+           {/* Address Bar */}
+           <div className="h-12 border-b border-slate-800 flex items-center px-4 gap-3 bg-slate-950/50">
+              <div className="flex gap-1">
+                 <button onClick={handleUpDir} disabled={currentPath === '/'} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white disabled:opacity-30 transition-colors border border-slate-700/50">
+                   <ArrowUp size={16} />
+                 </button>
+                 <button onClick={() => refreshFiles(session.id, currentPath)} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors border border-slate-700/50">
+                    <RefreshCw size={16} className={isLoadingFiles ? "animate-spin" : ""} />
+                 </button>
+              </div>
+              
+              <form onSubmit={handlePathSubmit} className="flex-1">
+                 <input 
+                    type="text" 
+                    value={pathInput}
+                    onChange={(e) => setPathInput(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 font-mono transition-all"
+                 />
+              </form>
+
+              <div className="h-6 w-px bg-slate-800 mx-1" />
+              
+              <div className="flex gap-1">
+                 <button onClick={() => handleAction(async () => {
+                      const name = prompt("Folder name:");
+                      if(name) await window.electron?.sftpCreateFolder(session.id, currentPath === '/' ? `/${name}` : `${currentPath}/${name}`);
+                  }, "Create Folder Failed")} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50">
+                    <FolderPlus size={14} /> New Folder
+                  </button>
+                  <button onClick={() => handleAction(() => window.electron?.sftpUpload(session.id, currentPath), "Upload Failed")} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 hover:text-indigo-300 rounded-lg text-xs font-medium transition-colors border border-indigo-500/20">
+                    <Upload size={14} /> Upload
+                  </button>
+              </div>
            </div>
            
-           <div className="flex-1 overflow-auto custom-scrollbar">
-             <table className="w-full text-left text-xs">
-               <thead className="bg-slate-900/80 text-slate-500 sticky top-0 z-10 backdrop-blur-sm">
+           <div className="flex-1 overflow-auto custom-scrollbar bg-[#020617]">
+             <table className="w-full text-left text-xs border-separate border-spacing-0">
+               <thead className="bg-slate-900/80 text-slate-500 sticky top-0 z-10 backdrop-blur-sm shadow-sm">
                  <tr>
-                   <th className="p-2 pl-4 w-8"></th>
-                   <th className="p-2">Name</th>
-                   <th className="p-2 w-24">Size</th>
-                   <th className="p-2 w-24">Rights</th>
-                   <th className="p-2 w-32 text-right pr-4">Actions</th>
+                   <th className="p-3 pl-6 w-10 border-b border-slate-800">Type</th>
+                   <th className="p-3 border-b border-slate-800">Name</th>
+                   <th className="p-3 w-24 border-b border-slate-800">Size</th>
+                   <th className="p-3 w-24 border-b border-slate-800">Perms</th>
+                   <th className="p-3 w-48 text-right pr-6 border-b border-slate-800">Actions</th>
                  </tr>
                </thead>
                <tbody className="divide-y divide-slate-800/30">
                  {files.map((file, i) => (
                    <tr 
                       key={i} 
-                      className="hover:bg-slate-800/30 group transition-colors cursor-pointer"
+                      className="hover:bg-slate-800/40 group transition-colors cursor-pointer"
                       onDoubleClick={() => file.isDirectory ? handleNavigate(file.filename) : handleAction(async () => {
                           const content = await window.electron?.sftpReadFile(session.id, `${currentPath}/${file.filename}`);
                           setEditingFile({ path: `${currentPath}/${file.filename}`, content });
                           setShowEditor(true);
                       }, "Read Failed")}
                    >
-                     <td className="p-2 pl-4">
+                     <td className="p-3 pl-6">
                        {file.isDirectory ? <Folder size={16} className="text-indigo-400 fill-indigo-400/10" /> : <FileText size={16} className="text-slate-600" />}
                      </td>
-                     <td className="p-2 font-medium text-slate-300 group-hover:text-indigo-200">
+                     <td className="p-3 font-medium text-slate-300 group-hover:text-indigo-200">
                        {file.filename}
                      </td>
-                     <td className="p-2 text-slate-500 font-mono">
-                       {file.isDirectory ? '-' : (file.attrs.size / 1024).toFixed(1) + ' KB'}
+                     <td className="p-3 text-slate-500 font-mono">
+                       {file.isDirectory ? '-' : (file.attrs.size < 1024 ? file.attrs.size + ' B' : (file.attrs.size / 1024).toFixed(1) + ' KB')}
                      </td>
-                     <td className="p-2 text-slate-500 font-mono">
+                     <td className="p-3 text-slate-500 font-mono text-[10px] uppercase">
                        {file.attrs.mode.toString(8).slice(-3)}
                      </td>
-                     <td className="p-2 text-right pr-4">
+                     <td className="p-3 text-right pr-6">
                         <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                           {/* Context Actions */}
+                           <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Rename"><Edit3 size={14} /></button>
+                           <button onClick={(e) => { e.stopPropagation(); setShowPermissions({item: file, mode: file.attrs.mode.toString(8).slice(-3)}) }} className="p-1.5 hover:bg-slate-700 hover:text-amber-300 text-slate-500 rounded" title="Permissions"><Lock size={14} /></button>
+                           
                            {(file.filename.endsWith('.tar.gz') || file.filename.endsWith('.zip')) ? (
-                             <button onClick={(e) => { e.stopPropagation(); window.electron?.sshExec(session.id, `cd "${currentPath}" && ${file.filename.endsWith('.zip') ? 'unzip' : 'tar -xzf'} "${file.filename}"`).then(() => refreshFiles(session.id, currentPath)); }} className="p-1 hover:bg-indigo-500/20 hover:text-indigo-400 rounded"><Expand size={14} /></button>
+                             <button onClick={(e) => { e.stopPropagation(); window.electron?.sshExec(session.id, `cd "${currentPath}" && ${file.filename.endsWith('.zip') ? 'unzip' : 'tar -xzf'} "${file.filename}"`).then(() => refreshFiles(session.id, currentPath)); }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-400 text-slate-500 rounded" title="Extract"><Expand size={14} /></button>
                            ) : (
-                             !file.isDirectory && <button onClick={(e) => { e.stopPropagation(); window.electron?.sshExec(session.id, `cd "${currentPath}" && tar -czf "${file.filename}.tar.gz" "${file.filename}"`).then(() => refreshFiles(session.id, currentPath)); }} className="p-1 hover:bg-indigo-500/20 hover:text-indigo-400 rounded"><Archive size={14} /></button>
+                             !file.isDirectory && <button onClick={(e) => { e.stopPropagation(); window.electron?.sshExec(session.id, `cd "${currentPath}" && tar -czf "${file.filename}.tar.gz" "${file.filename}"`).then(() => refreshFiles(session.id, currentPath)); }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-400 text-slate-500 rounded" title="Compress"><Archive size={14} /></button>
                            )}
                            
                            {!file.isDirectory && (
-                             <button onClick={(e) => { e.stopPropagation(); handleAction(async () => window.electron?.sftpDownload(session.id, `${currentPath}/${file.filename}`), "Download Failed")}} className="p-1 hover:bg-green-500/20 hover:text-green-400 rounded"><Download size={14} /></button>
+                             <button onClick={(e) => { e.stopPropagation(); handleAction(async () => window.electron?.sftpDownload(session.id, `${currentPath}/${file.filename}`), "Download Failed")}} className="p-1.5 hover:bg-slate-700 hover:text-emerald-400 text-slate-500 rounded" title="Download"><Download size={14} /></button>
                            )}
-                           <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) handleAction(async () => window.electron?.sftpDelete(session.id, `${currentPath}/${file.filename}`, file.isDirectory), "Delete Failed")}} className="p-1 hover:bg-red-500/20 hover:text-red-400 rounded"><Trash size={14} /></button>
+                           <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) handleAction(async () => window.electron?.sftpDelete(session.id, `${currentPath}/${file.filename}`, file.isDirectory), "Delete Failed")}} className="p-1.5 hover:bg-slate-700 hover:text-red-400 text-slate-500 rounded" title="Delete"><Trash size={14} /></button>
                         </div>
                      </td>
                    </tr>
@@ -323,7 +351,7 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
         </div>
       </div>
 
-      {/* Simple Editor Modal */}
+      {/* Editor Modal */}
       {showEditor && editingFile && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col animate-in fade-in duration-100">
            <div className="h-12 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4">
@@ -344,6 +372,61 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
            />
         </div>
       )}
+
+      {/* Rename Modal */}
+      <Modal isOpen={!!showRename} onClose={() => setShowRename(null)} title="Rename File">
+          {showRename && (
+             <form onSubmit={(e) => {
+                 e.preventDefault();
+                 handleAction(async () => {
+                     await window.electron?.sftpRename(session.id, `${currentPath}/${showRename.item.filename}`, `${currentPath}/${showRename.name}`);
+                     setShowRename(null);
+                 }, "Rename Failed");
+             }} className="space-y-4">
+                 <input 
+                   autoFocus
+                   value={showRename.name} 
+                   onChange={e => setShowRename({...showRename, name: e.target.value})}
+                   className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white outline-none focus:border-indigo-500"
+                 />
+                 <div className="flex justify-end gap-2">
+                     <button type="button" onClick={() => setShowRename(null)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+                     <button type="submit" className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded">Rename</button>
+                 </div>
+             </form>
+          )}
+      </Modal>
+
+      {/* Permissions Modal */}
+      <Modal isOpen={!!showPermissions} onClose={() => setShowPermissions(null)} title="Change Permissions">
+          {showPermissions && (
+             <form onSubmit={(e) => {
+                 e.preventDefault();
+                 handleAction(async () => {
+                     const mode = parseInt(showPermissions.mode, 8);
+                     await window.electron?.sftpChmod(session.id, `${currentPath}/${showPermissions.item.filename}`, mode);
+                     setShowPermissions(null);
+                 }, "Chmod Failed");
+             }} className="space-y-4">
+                 <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                        <label className="text-xs text-slate-500 uppercase block mb-1">Octal Mode (e.g. 755)</label>
+                        <input 
+                            autoFocus
+                            value={showPermissions.mode} 
+                            onChange={e => setShowPermissions({...showPermissions, mode: e.target.value})}
+                            maxLength={3}
+                            className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white outline-none focus:border-indigo-500 font-mono"
+                        />
+                    </div>
+                 </div>
+                 <div className="flex justify-end gap-2">
+                     <button type="button" onClick={() => setShowPermissions(null)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+                     <button type="submit" className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded">Update</button>
+                 </div>
+             </form>
+          )}
+      </Modal>
     </div>
   );
 };
@@ -364,7 +447,6 @@ export default function App() {
     if (saved) {
       setConnections(JSON.parse(saved));
     }
-    // Open manager if no sessions initially
     setManagerOpen(true);
   }, []);
 
@@ -375,7 +457,7 @@ export default function App() {
 
   const createSession = (conn: SSHConnection) => {
     const newSession: Session = {
-      id: crypto.randomUUID(), // Unique session ID
+      id: crypto.randomUUID(),
       connection: conn,
       startedAt: Date.now()
     };
@@ -392,8 +474,7 @@ export default function App() {
       }
       return newSessions;
     });
-    // If no sessions left, open manager
-    if (sessions.length <= 1) { // 1 because we haven't updated state yet in this closure
+    if (sessions.length <= 1) { 
        setManagerOpen(true);
     }
   };
@@ -403,33 +484,33 @@ export default function App() {
     if (!editingConnection) return;
 
     if (editingConnection.id) {
-      // Edit existing
       const updated = connections.map(c => c.id === editingConnection.id ? editingConnection as SSHConnection : c);
       saveConnections(updated);
     } else {
-      // Create new
       const newConn = { ...editingConnection, id: Math.random().toString(36).substr(2, 9) } as SSHConnection;
       saveConnections([...connections, newConn]);
     }
-    setEditingConnection(null); // Return to list view
+    setEditingConnection(null);
   };
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30">
       
       {/* --- Custom Titlebar --- */}
+      {/* The outer container is DRAGGABLE. Interactive children must be NO-DRAG. */}
       <div className={cn(
-        "h-10 flex items-end bg-slate-950 border-b border-slate-800 select-none titlebar w-full z-50",
-        isMac && "pl-20", // Traffic lights area
-        isWindows && "pr-36" // Window controls area
+        "h-10 flex items-end bg-slate-950 border-b border-slate-800 select-none titlebar w-full z-50 overflow-hidden",
+        isMac && "pl-20",
+        isWindows && "pr-36" 
       )}>
-        <div className="flex items-center h-full px-2 gap-1 overflow-x-auto no-drag w-full scrollbar-none">
+        {/* The Tabs Container is a Flex Row */}
+        <div className="flex items-center h-full px-2 gap-1 overflow-x-auto w-full scrollbar-none">
           {sessions.map(session => (
             <div 
               key={session.id}
               onClick={() => setActiveSessionId(session.id)}
               className={cn(
-                "group relative flex items-center gap-2 px-3 h-8 min-w-[140px] max-w-[200px] rounded-t-lg border-t border-x text-sm cursor-pointer transition-all",
+                "group relative flex items-center gap-2 px-3 h-8 min-w-[140px] max-w-[200px] rounded-t-lg border-t border-x text-sm cursor-pointer transition-all no-drag",
                 activeSessionId === session.id 
                   ? "bg-[#020617] border-slate-700 text-indigo-400 z-10 font-medium shadow-sm" 
                   : "bg-slate-900/50 border-transparent text-slate-500 hover:bg-slate-900 hover:text-slate-300 mb-0.5"
@@ -439,11 +520,10 @@ export default function App() {
                <span className="truncate flex-1">{session.connection.name}</span>
                <button 
                  onClick={(e) => { e.stopPropagation(); closeSession(session.id); }}
-                 className="opacity-0 group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400 p-0.5 rounded transition-all"
+                 className="opacity-0 group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400 p-0.5 rounded transition-all no-drag"
                >
                  <X size={12} />
                </button>
-               {/* Bottom cover for active tab to blend with content */}
                {activeSessionId === session.id && (
                  <div className="absolute -bottom-[1px] left-0 right-0 h-[1px] bg-[#020617] z-20" />
                )}
@@ -455,7 +535,7 @@ export default function App() {
               setEditingConnection(null);
               setManagerOpen(true);
             }}
-            className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-900 text-slate-500 hover:text-indigo-400 transition-colors mb-0.5"
+            className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-900 text-slate-500 hover:text-indigo-400 transition-colors mb-0.5 no-drag"
             title="New Connection"
           >
             <Plus size={18} />
@@ -465,7 +545,6 @@ export default function App() {
 
       {/* --- Main Content Area --- */}
       <div className="flex-1 relative overflow-hidden bg-[#020617]">
-        {/* Render all active sessions (hidden/visible) to preserve state */}
         {sessions.map(session => (
           <SessionView 
             key={session.id} 
