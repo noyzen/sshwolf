@@ -23,14 +23,15 @@ function loadWindowState() {
   } catch (e) {
     console.error('Failed to load window state:', e);
   }
-  return { width: 1200, height: 800 };
+  return { width: 1200, height: 800, isMaximized: false };
 }
 
 function saveWindowState() {
   if (!mainWindow) return;
   const bounds = mainWindow.getBounds();
+  const isMaximized = mainWindow.isMaximized();
   try {
-    fs.writeFileSync(statePath, JSON.stringify(bounds));
+    fs.writeFileSync(statePath, JSON.stringify({ ...bounds, isMaximized }));
   } catch (e) {
     console.error('Failed to save window state:', e);
   }
@@ -58,7 +59,14 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
     },
+    show: false // Don't show immediately to prevent flash
   });
+
+  if (state.isMaximized) {
+    mainWindow.maximize();
+  }
+  
+  mainWindow.show();
 
   const isDev = process.env.npm_lifecycle_event === 'dev:electron' || process.argv.includes('--dev');
 
@@ -418,24 +426,8 @@ ipcMain.handle('sftp-write-file', async (event, { connectionId, path: remotePath
     conn.sftp((err, sftp) => {
       if (err) { reject(err); return; }
 
-      // Handle empty file creation (Touch)
-      if (content.length === 0) {
-        sftp.open(remotePath, 'w', (err, handle) => {
-          if (err) {
-            sftp.end();
-            reject(err);
-            return;
-          }
-          sftp.close(handle, (err) => {
-            sftp.end();
-            if (err) reject(err);
-            else resolve({ success: true });
-          });
-        });
-        return;
-      }
-
-      // Handle file write
+      // Handle file write (including empty content for 'touch')
+      // sftp.writeFile handles string content efficiently
       sftp.writeFile(remotePath, content, (err) => {
         sftp.end();
         if (err) reject(err);

@@ -515,6 +515,31 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }:
     } catch (e: any) { alert(`Error: ${e.message}`); }
   };
 
+  // Helper actions
+  const createNewFile = async () => {
+    const name = prompt("File name:");
+    if (!name || !name.trim()) return;
+    try {
+        const targetPath = currentPath === '/' ? `/${name.trim()}` : `${currentPath}/${name.trim()}`;
+        await window.electron?.sftpWriteFile(subTab.connectionId, targetPath, "");
+        refreshFiles(currentPath);
+    } catch (e: any) {
+        alert(`Failed to create file: ${e.message}`);
+    }
+  };
+
+  const createNewFolder = async () => {
+    const name = prompt("Folder name:");
+    if (!name || !name.trim()) return;
+    try {
+        const targetPath = currentPath === '/' ? `/${name.trim()}` : `${currentPath}/${name.trim()}`;
+        await window.electron?.sftpCreateFolder(subTab.connectionId, targetPath);
+        refreshFiles(currentPath);
+    } catch (e: any) {
+        alert(`Failed to create folder: ${e.message}`);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#020617]">
        {/* Address Bar */}
@@ -530,8 +555,8 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }:
           <button onClick={() => onOpenTerminal(currentPath)} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-indigo-400 transition-colors border border-slate-700/50" title="Open Terminal Here"><Terminal size={16} /></button>
           <div className="h-6 w-px bg-slate-800 mx-1" />
           <div className="flex gap-1">
-              <button onClick={async () => { const name = prompt("File name:"); if(name) { await window.electron?.sftpWriteFile(subTab.connectionId, currentPath === '/' ? `/${name}` : `${currentPath}/${name}`, ""); refreshFiles(currentPath); } }} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FilePlus size={14} /> New File</button>
-              <button onClick={async () => { const name = prompt("Folder name:"); if(name) { await window.electron?.sftpCreateFolder(subTab.connectionId, currentPath === '/' ? `/${name}` : `${currentPath}/${name}`); refreshFiles(currentPath); } }} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FolderPlus size={14} /> New Folder</button>
+              <button onClick={createNewFile} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FilePlus size={14} /> New File</button>
+              <button onClick={createNewFolder} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FolderPlus size={14} /> New Folder</button>
               <button onClick={async () => { await window.electron?.sftpUpload(subTab.connectionId, currentPath); refreshFiles(currentPath); }} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 hover:text-indigo-300 rounded-lg text-xs font-medium transition-colors border border-indigo-500/20"><Upload size={14} /> Upload</button>
           </div>
        </div>
