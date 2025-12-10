@@ -6,7 +6,15 @@
     <title>SSH Wolf</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <link rel="stylesheet" href="fonts/all.min.css" />
     <style>
+      /* Shabnam Font Registration */
+      @font-face { font-family: 'Shabnam'; src: url('fonts/Shabnam.woff2') format('woff2'); font-weight: normal; }
+      @font-face { font-family: 'Shabnam'; src: url('fonts/Shabnam-Bold.woff2') format('woff2'); font-weight: bold; }
+      @font-face { font-family: 'Shabnam'; src: url('fonts/Shabnam-Light.woff2') format('woff2'); font-weight: 300; }
+      @font-face { font-family: 'Shabnam'; src: url('fonts/Shabnam-Medium.woff2') format('woff2'); font-weight: 500; }
+      @font-face { font-family: 'Shabnam'; src: url('fonts/Shabnam-Thin.woff2') format('woff2'); font-weight: 100; }
+
       /* Custom Scrollbar for dark theme */
       ::-webkit-scrollbar {
         width: 10px;
@@ -29,6 +37,10 @@
       }
       .no-drag {
         -webkit-app-region: no-drag;
+      }
+
+      body {
+        font-family: 'Shabnam', ui-sans-serif, system-ui, sans-serif;
       }
     </style>
   <script type="importmap">

@@ -1,7 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, Trash, Server, Edit2, Key, Shield, X 
-} from 'lucide-react';
 import { SSHConnection, ServerSession, SubTab, ClipboardState } from './types';
 import { cn, isMac, isWindows } from './utils';
 import { Modal } from './Modals';
@@ -137,13 +134,13 @@ export default function App() {
                 activeSessionId === session.id ? "bg-[#0f172a] border-slate-700 text-indigo-400 z-10 font-medium shadow-sm" : "bg-slate-900/50 border-transparent text-slate-500 hover:bg-slate-900 hover:text-slate-300 mb-0.5"
               )}
             >
-               <Server size={12} className={activeSessionId === session.id ? "text-indigo-500" : "opacity-50"} />
+               <i className={cn("fa-solid fa-server text-[12px]", activeSessionId === session.id ? "text-indigo-500" : "opacity-50")} />
                <span className="truncate flex-1">{session.connection.name}</span>
-               <button onClick={(e) => { e.stopPropagation(); closeServerSession(session.id); }} className="opacity-0 group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400 p-0.5 rounded transition-all no-drag"><X size={12} /></button>
+               <button onClick={(e) => { e.stopPropagation(); closeServerSession(session.id); }} className="opacity-0 group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400 p-0.5 rounded transition-all no-drag"><i className="fa-solid fa-xmark text-[12px]" /></button>
                {activeSessionId === session.id && <div className="absolute -bottom-[1px] left-0 right-0 h-[1px] bg-[#0f172a] z-20" />}
             </div>
           ))}
-          <button onClick={() => { setEditingConnection(null); setManagerOpen(true); }} className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-900 text-slate-500 hover:text-indigo-400 transition-colors mb-0.5 no-drag" title="New Connection"><Plus size={18} /></button>
+          <button onClick={() => { setEditingConnection(null); setManagerOpen(true); }} className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-900 text-slate-500 hover:text-indigo-400 transition-colors mb-0.5 no-drag" title="New Connection"><i className="fa-solid fa-plus text-lg" /></button>
         </div>
       </div>
 
@@ -162,7 +159,9 @@ export default function App() {
         ))}
         {serverSessions.length === 0 && !isManagerOpen && (
            <div className="flex flex-col items-center justify-center h-full text-slate-600">
-              <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center mb-4 shadow-xl shadow-black/20"><Server size={32} /></div>
+              <div className="w-20 h-20 mb-4 drop-shadow-2xl">
+                <img src="appicon.png" alt="SSH Wolf" className="w-full h-full object-contain" />
+              </div>
               <h2 className="text-xl font-bold text-slate-400">No Active Sessions</h2>
               <button onClick={() => setManagerOpen(true)} className="mt-4 text-indigo-400 hover:text-indigo-300 hover:underline">Open Connection Manager</button>
            </div>
@@ -176,17 +175,17 @@ export default function App() {
                 {connections.map(conn => (
                   <div key={conn.id} className="group bg-slate-950 border border-slate-800 hover:border-indigo-500/50 rounded-xl p-4 transition-all flex items-center justify-between">
                      <div className="flex items-center gap-4 cursor-pointer flex-1" onClick={() => createServerSession(conn)}>
-                        <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center text-indigo-500 shadow-inner"><Server size={20} /></div>
+                        <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center text-indigo-500 shadow-inner"><i className="fa-solid fa-server text-xl" /></div>
                         <div><h4 className="font-bold text-slate-200">{conn.name}</h4><p className="text-xs text-slate-500 font-mono">{conn.username}@{conn.host}</p></div>
                      </div>
                      <div className="flex gap-1">
-                        <button onClick={() => setEditingConnection(conn)} className="p-2 text-slate-500 hover:bg-slate-900 hover:text-indigo-400 rounded-lg transition-colors" title="Edit"><Edit2 size={16} /></button>
-                        <button onClick={() => { if(confirm(`Delete ${conn.name}?`)) setConnections(connections.filter(c => c.id !== conn.id)); }} className="p-2 text-slate-500 hover:bg-slate-900 hover:text-red-400 rounded-lg transition-colors" title="Delete"><Trash size={16} /></button>
+                        <button onClick={() => setEditingConnection(conn)} className="p-2 text-slate-500 hover:bg-slate-900 hover:text-indigo-400 rounded-lg transition-colors" title="Edit"><i className="fa-solid fa-pen-to-square text-base" /></button>
+                        <button onClick={() => { if(confirm(`Delete ${conn.name}?`)) setConnections(connections.filter(c => c.id !== conn.id)); }} className="p-2 text-slate-500 hover:bg-slate-900 hover:text-red-400 rounded-lg transition-colors" title="Delete"><i className="fa-solid fa-trash-can text-base" /></button>
                         <button onClick={() => createServerSession(conn)} className="ml-2 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20">Connect</button>
                      </div>
                   </div>
                 ))}
-                <button onClick={() => setEditingConnection({ port: 22 })} className="w-full py-3 border-2 border-dashed border-slate-800 hover:border-slate-700 hover:bg-slate-900/50 text-slate-500 hover:text-slate-300 rounded-xl transition-all flex items-center justify-center gap-2 font-medium"><Plus size={18} /> Add New Connection</button>
+                <button onClick={() => setEditingConnection({ port: 22 })} className="w-full py-3 border-2 border-dashed border-slate-800 hover:border-slate-700 hover:bg-slate-900/50 text-slate-500 hover:text-slate-300 rounded-xl transition-all flex items-center justify-center gap-2 font-medium"><i className="fa-solid fa-plus text-lg" /> Add New Connection</button>
              </div>
           </div>
         ) : (
@@ -199,7 +198,7 @@ export default function App() {
             <div><label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Username</label><input required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm" placeholder="root" value={editingConnection.username || ''} onChange={e => setEditingConnection({...editingConnection, username: e.target.value})} /></div>
             <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800 space-y-4">
                  <div className="flex items-center justify-between"><label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Authentication</label><div className="flex bg-slate-900 p-0.5 rounded-lg border border-slate-800"><button type="button" onClick={() => setAuthType('password')} className={cn("px-3 py-1 text-xs font-medium rounded-md transition-all", authType === 'password' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-300")}>Password</button><button type="button" onClick={() => setAuthType('key')} className={cn("px-3 py-1 text-xs font-medium rounded-md transition-all", authType === 'key' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-300")}>Private Key</button></div></div>
-                 {authType === 'password' ? (<input type="password" className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm" placeholder="Password" value={editingConnection.password || ''} onChange={e => setEditingConnection({...editingConnection, password: e.target.value})} />) : (<div className="space-y-3"><div className="flex gap-2"><div className="relative flex-1"><Key className="absolute left-3 top-3 text-slate-600" size={16} /><input readOnly className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 pl-10 text-slate-300 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-xs" placeholder="No key selected" value={editingConnection.privateKeyPath || ''} /></div><button type="button" onClick={async () => { const path = await window.electron?.selectKeyFile(); if(path) setEditingConnection({...editingConnection, privateKeyPath: path}); }} className="px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm border border-slate-700 transition-colors">Browse</button></div><div className="relative"><Shield className="absolute left-3 top-3 text-slate-600" size={16} /><input type="password" className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 pl-10 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm" placeholder="Passphrase (Optional)" value={editingConnection.passphrase || ''} onChange={e => setEditingConnection({...editingConnection, passphrase: e.target.value})} /></div></div>)}
+                 {authType === 'password' ? (<input type="password" className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm" placeholder="Password" value={editingConnection.password || ''} onChange={e => setEditingConnection({...editingConnection, password: e.target.value})} />) : (<div className="space-y-3"><div className="flex gap-2"><div className="relative flex-1"><i className="fa-solid fa-key absolute left-3 top-3 text-slate-600 text-base" /><input readOnly className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 pl-10 text-slate-300 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-xs" placeholder="No key selected" value={editingConnection.privateKeyPath || ''} /></div><button type="button" onClick={async () => { const path = await window.electron?.selectKeyFile(); if(path) setEditingConnection({...editingConnection, privateKeyPath: path}); }} className="px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm border border-slate-700 transition-colors">Browse</button></div><div className="relative"><i className="fa-solid fa-shield-halved absolute left-3 top-3 text-slate-600 text-base" /><input type="password" className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 pl-10 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm" placeholder="Passphrase (Optional)" value={editingConnection.passphrase || ''} onChange={e => setEditingConnection({...editingConnection, passphrase: e.target.value})} /></div></div>)}
             </div>
             <div className="pt-4 flex justify-between items-center border-t border-slate-800 mt-4"><button type="button" onClick={() => setEditingConnection(null)} className="text-slate-500 hover:text-slate-300 text-sm font-medium px-2 py-1">Back to list</button><button type="submit" className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium shadow-lg shadow-indigo-500/20 transition-all">Save Connection</button></div>
           </form>

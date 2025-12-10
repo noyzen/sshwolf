@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
-import { Copy, Clipboard, X } from 'lucide-react';
 import { SubTab, SSHConnection } from './types';
 import { ContextMenu, ContextMenuOption } from './Modals';
 
@@ -105,7 +104,7 @@ export const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, 
         options: [
             { 
                 label: "Copy", 
-                icon: <Copy size={14}/>, 
+                icon: <i className="fa-regular fa-copy text-[14px]"/>, 
                 onClick: () => { 
                     navigator.clipboard.writeText(selection || ''); 
                     setContextMenu(null);
@@ -113,7 +112,7 @@ export const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, 
             },
             { 
                 label: "Paste", 
-                icon: <Clipboard size={14}/>, 
+                icon: <i className="fa-regular fa-clipboard text-[14px]"/>, 
                 onClick: () => { 
                     navigator.clipboard.readText().then(text => {
                         window.electron?.sshWrite(subTab.connectionId, text);
@@ -124,7 +123,7 @@ export const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, 
             { separator: true, label: "", onClick: () => {} },
             { 
                 label: "Cancel (Ctrl+C)", 
-                icon: <X size={14}/>, 
+                icon: <i className="fa-solid fa-xmark text-[14px]"/>, 
                 onClick: () => {
                     window.electron?.sshWrite(subTab.connectionId, '\x03');
                     setContextMenu(null);

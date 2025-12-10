@@ -1,8 +1,4 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { 
-  FileText, Minus, Plus, WrapText, RefreshCw, Save, Loader2, 
-  Search, X, ArrowDown, ArrowUp, Replace, Type 
-} from 'lucide-react';
 import { SubTab, SSHConnection } from './types';
 import { cn } from './utils';
 
@@ -216,25 +212,25 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
        <div className={cn("h-12 flex items-center justify-between px-4 shadow-sm shrink-0 z-20 relative", theme.toolbar)}>
           <div className="flex items-center gap-4 overflow-hidden">
              <div className="flex items-center gap-2 text-slate-300">
-                <FileText className="text-indigo-400" size={18} />
+                <i className="fa-regular fa-file-lines text-indigo-400 text-[18px]" />
                 <span className="font-mono text-xs truncate max-w-[300px] text-slate-200">{subTab.path}</span>
              </div>
              <div className="h-4 w-px bg-slate-700" />
              <div className="flex items-center gap-1">
-                 <button onClick={() => setFontSize(s => Math.max(10, s-1))} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white"><Minus size={14} /></button>
+                 <button onClick={() => setFontSize(s => Math.max(10, s-1))} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white"><i className="fa-solid fa-minus text-[14px]" /></button>
                  <span className="text-xs text-slate-500 w-6 text-center">{fontSize}</span>
-                 <button onClick={() => setFontSize(s => Math.min(24, s+1))} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white"><Plus size={14} /></button>
+                 <button onClick={() => setFontSize(s => Math.min(24, s+1))} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white"><i className="fa-solid fa-plus text-[14px]" /></button>
                  <div className="h-4 w-px bg-slate-700 mx-1" />
-                 <button onClick={() => setWordWrap(!wordWrap)} className={cn("p-1.5 rounded transition-colors", wordWrap ? "bg-indigo-600/20 text-indigo-400" : "text-slate-400 hover:bg-slate-800 hover:text-white")} title="Toggle Word Wrap"><WrapText size={14} /></button>
-                 <button onClick={() => setShowFind(!showFind)} className={cn("p-1.5 rounded transition-colors", showFind ? "bg-indigo-600/20 text-indigo-400" : "text-slate-400 hover:bg-slate-800 hover:text-white")} title="Find & Replace (Ctrl+F)"><Search size={14} /></button>
+                 <button onClick={() => setWordWrap(!wordWrap)} className={cn("p-1.5 rounded transition-colors", wordWrap ? "bg-indigo-600/20 text-indigo-400" : "text-slate-400 hover:bg-slate-800 hover:text-white")} title="Toggle Word Wrap"><i className="fa-solid fa-paragraph text-[14px]" /></button>
+                 <button onClick={() => setShowFind(!showFind)} className={cn("p-1.5 rounded transition-colors", showFind ? "bg-indigo-600/20 text-indigo-400" : "text-slate-400 hover:bg-slate-800 hover:text-white")} title="Find & Replace (Ctrl+F)"><i className="fa-solid fa-magnifying-glass text-[14px]" /></button>
              </div>
           </div>
           <div className="flex gap-2">
              <button onClick={loadFile} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors" title="Reload">
-                 <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+                 <i className={cn("fa-solid fa-rotate text-[14px]", loading && "fa-spin")} />
              </button>
              <button disabled={saving || loading} onClick={handleSave} className="flex items-center gap-2 px-4 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-all disabled:opacity-50 font-medium shadow-lg shadow-indigo-500/20">
-               {saving ? <Loader2 className="animate-spin" size={12} /> : <Save size={12} />} Save
+               {saving ? <i className="fa-solid fa-spinner fa-spin text-[12px]" /> : <i className="fa-regular fa-floppy-disk text-[12px]" />} Save
              </button>
           </div>
        </div>
@@ -245,7 +241,7 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
             <div className="flex flex-col gap-2">
                <div className="flex items-center gap-2">
                    <div className="flex-1 relative">
-                      <Search size={14} className="absolute left-2.5 top-2 text-slate-500"/>
+                      <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-slate-500 text-[14px]"/>
                       <input 
                         id="find-input"
                         autoFocus
@@ -257,17 +253,17 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
                       />
                    </div>
                    <div className="flex gap-0.5">
-                       <button onClick={() => performFind('prev')} className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded" title="Previous (Shift+Enter)"><ArrowUp size={14}/></button>
-                       <button onClick={() => performFind('next')} className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded" title="Next (Enter)"><ArrowDown size={14}/></button>
+                       <button onClick={() => performFind('prev')} className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded" title="Previous (Shift+Enter)"><i className="fa-solid fa-arrow-up text-[14px]"/></button>
+                       <button onClick={() => performFind('next')} className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded" title="Next (Enter)"><i className="fa-solid fa-arrow-down text-[14px]"/></button>
                    </div>
-                   <button onClick={() => setShowReplace(!showReplace)} className={cn("p-1.5 rounded transition-colors", showReplace ? "bg-indigo-500/20 text-indigo-400" : "hover:bg-slate-800 text-slate-400 hover:text-white")} title="Toggle Replace"><Replace size={14}/></button>
-                   <button onClick={() => setShowFind(false)} className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded"><X size={14}/></button>
+                   <button onClick={() => setShowReplace(!showReplace)} className={cn("p-1.5 rounded transition-colors", showReplace ? "bg-indigo-500/20 text-indigo-400" : "hover:bg-slate-800 text-slate-400 hover:text-white")} title="Toggle Replace"><i className="fa-solid fa-right-left text-[14px]"/></button>
+                   <button onClick={() => setShowFind(false)} className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded"><i className="fa-solid fa-xmark text-[14px]"/></button>
                </div>
                
                {showReplace && (
                   <div className="flex items-center gap-2">
                       <div className="flex-1 relative">
-                          <Type size={14} className="absolute left-2.5 top-2 text-slate-500"/>
+                          <i className="fa-solid fa-font absolute left-2.5 top-2 text-slate-500 text-[14px]"/>
                           <input 
                             value={replaceText} 
                             onChange={e => setReplaceText(e.target.value)}
@@ -288,7 +284,7 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
        <div className="flex-1 relative flex overflow-hidden">
          {loading && !content ? (
              <div className="absolute inset-0 flex items-center justify-center text-slate-500 gap-2 z-10 bg-slate-950">
-                 <Loader2 className="animate-spin" /> Loading...
+                 <i className="fa-solid fa-spinner fa-spin" /> Loading...
              </div>
          ) : (
             <>

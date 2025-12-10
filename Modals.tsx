@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { X, CheckSquare, Square, CheckCircle2, PackageOpen, DownloadCloud, Loader2, Copy, Clipboard } from 'lucide-react';
 import { cn } from './utils';
 import { FileEntry } from './types';
 
@@ -12,7 +11,7 @@ export const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-lg",
           <h3 className="text-lg font-semibold text-slate-200">{title}</h3>
           {!hideClose && (
             <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors p-1 hover:bg-slate-800 rounded">
-              <X size={20} />
+              <i className="fa-solid fa-xmark text-xl" />
             </button>
           )}
         </div>
@@ -56,7 +55,7 @@ const PermCheckbox = ({ label, checked, onChange }: { label: string, checked: bo
   <div className="flex flex-col items-center justify-center p-2 bg-slate-950 rounded border border-slate-800">
     <span className="text-[10px] text-slate-500 mb-1 font-mono uppercase">{label}</span>
     <button onClick={() => onChange(!checked)} className={cn("transition-colors", checked ? "text-indigo-400" : "text-slate-700")}>
-      {checked ? <CheckSquare size={18} /> : <Square size={18} />}
+      {checked ? <i className="fa-solid fa-square-check text-lg" /> : <i className="fa-regular fa-square text-lg" />}
     </button>
   </div>
 );
@@ -219,7 +218,7 @@ export const SmartDependencyInstaller = ({
           <>
             <div className="flex items-center gap-4 bg-amber-500/10 border border-amber-500/20 p-4 rounded-lg">
                <div className="bg-amber-500/20 p-2 rounded-lg text-amber-500">
-                  <PackageOpen size={24} />
+                  <i className="fa-solid fa-box-open text-2xl" />
                </div>
                <div>
                   <h4 className="font-semibold text-amber-200">Missing Dependency</h4>
@@ -232,7 +231,7 @@ export const SmartDependencyInstaller = ({
             <div className="flex justify-end gap-3 mt-4">
               <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
               <button onClick={install} className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium shadow-lg shadow-indigo-500/20">
-                <DownloadCloud size={16} /> Install {tool}
+                <i className="fa-solid fa-cloud-arrow-down text-base" /> Install {tool}
               </button>
             </div>
           </>
@@ -252,11 +251,11 @@ export const SmartDependencyInstaller = ({
               </div>
               
               <div className="flex justify-end gap-3">
-                 {status === 'installing' && <div className="flex items-center gap-2 text-slate-400 text-sm"><Loader2 className="animate-spin" size={14}/> Installing...</div>}
+                 {status === 'installing' && <div className="flex items-center gap-2 text-slate-400 text-sm"><i className="fa-solid fa-spinner fa-spin text-sm" /> Installing...</div>}
                  
                  {status === 'success' && (
                    <button onClick={onSuccess} className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium shadow-lg shadow-emerald-500/20">
-                     <CheckCircle2 size={16} /> Continue
+                     <i className="fa-solid fa-circle-check text-base" /> Continue
                    </button>
                  )}
                  

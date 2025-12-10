@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Terminal, FileText, Folder, Plus, X, Zap, Search, Play, Save, History, Star } from 'lucide-react';
 import { ServerSession, SubTab, QuickCommand, ClipboardState } from './types';
 import { cn } from './utils';
 import { TerminalPane } from './TerminalPane';
@@ -110,17 +109,17 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
                  )}
                  title={tab.path}
                >
-                  {tab.type === 'terminal' ? <Terminal size={12} /> : tab.type === 'editor' ? <FileText size={12} className="text-emerald-500" /> : <Folder size={12} />}
+                  {tab.type === 'terminal' ? <i className="fa-solid fa-terminal text-[12px]" /> : tab.type === 'editor' ? <i className="fa-regular fa-file-lines text-[12px] text-emerald-500" /> : <i className="fa-regular fa-folder text-[12px]" />}
                   <span className="truncate flex-1">{tab.title}</span>
-                  <button onClick={(e) => { e.stopPropagation(); closeSubTab(tab.id); }} className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5"><X size={10} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); closeSubTab(tab.id); }} className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5"><i className="fa-solid fa-xmark text-[10px]" /></button>
                </div>
             ))}
             <div className="h-4 w-px bg-slate-800 mx-1 shrink-0" />
             <button onClick={() => addSubTab('terminal')} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-500 hover:text-indigo-400 hover:bg-slate-800 rounded transition-colors shrink-0" title="New Terminal">
-              <Plus size={12} /> Term
+              <i className="fa-solid fa-plus text-[12px]" /> Term
             </button>
             <button onClick={() => addSubTab('sftp')} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-500 hover:text-indigo-400 hover:bg-slate-800 rounded transition-colors shrink-0" title="New File Manager">
-              <Plus size={12} /> SFTP
+              <i className="fa-solid fa-plus text-[12px]" /> SFTP
             </button>
          </div>
          {isTerminal && (
@@ -129,13 +128,13 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
                 onClick={() => setShowQuickCmds(!showQuickCmds)}
                 className={cn("flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded transition-colors border", showQuickCmds ? "bg-indigo-600 border-indigo-500 text-white" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white")}
              >
-                <Zap size={12} /> Commands
+                <i className="fa-solid fa-bolt text-[12px]" /> Commands
              </button>
              {showQuickCmds && (
                   <div className="absolute right-0 top-full mt-2 w-80 bg-slate-900 border border-slate-700 rounded-lg shadow-xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[500px] z-50">
                       <div className="p-3 border-b border-slate-800 space-y-2 bg-slate-950/50 rounded-t-lg">
                           <div className="relative">
-                              <Search size={14} className="absolute left-3 top-2.5 text-slate-500" />
+                              <i className="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-[14px]" />
                               <input 
                                 autoFocus
                                 placeholder="Filter or Type command..." 
@@ -146,8 +145,8 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
                               />
                           </div>
                           <div className="flex gap-2">
-                             <button onClick={() => runCommand(inputCmd)} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><Play size={12}/> Run</button>
-                             <button onClick={() => saveQuickCommand(inputCmd, inputCmd)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><Save size={12}/> Save</button>
+                             <button onClick={() => runCommand(inputCmd)} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><i className="fa-solid fa-play text-[12px]" /> Run</button>
+                             <button onClick={() => saveQuickCommand(inputCmd, inputCmd)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><i className="fa-regular fa-floppy-disk text-[12px]" /> Save</button>
                           </div>
                       </div>
                       <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-4">
@@ -161,7 +160,7 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
                                             <span className="text-sm text-indigo-300 font-medium truncate">{qc.name}</span>
                                             <span className="text-[10px] text-slate-500 font-mono truncate">{qc.command}</span>
                                         </div>
-                                        <button onClick={(e) => { e.stopPropagation(); deleteQuickCommand(qc.id) }} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 p-1"><X size={12}/></button>
+                                        <button onClick={(e) => { e.stopPropagation(); deleteQuickCommand(qc.id) }} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 p-1"><i className="fa-solid fa-xmark text-[12px]" /></button>
                                         </div>
                                     ))}
                                 </div>
@@ -169,12 +168,12 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
                           )}
                           {filteredHistory.length > 0 && (
                              <div>
-                                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1 flex items-center gap-2"><History size={10}/> Recent History</h4>
+                                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1 flex items-center gap-2"><i className="fa-solid fa-clock-rotate-left text-[10px]" /> Recent History</h4>
                                 <div className="space-y-1">
                                     {filteredHistory.map((cmd, i) => (
                                         <div key={i} className="flex items-center justify-between group p-2 hover:bg-slate-800 rounded cursor-pointer border border-transparent hover:border-slate-700" onClick={() => runCommand(cmd, false)}>
                                             <span className="text-xs text-slate-400 font-mono truncate flex-1">{cmd}</span>
-                                            <button onClick={(e) => { e.stopPropagation(); saveQuickCommand(cmd, cmd); }} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-amber-400 p-1" title="Save to Quick Commands"><Star size={12}/></button>
+                                            <button onClick={(e) => { e.stopPropagation(); saveQuickCommand(cmd, cmd); }} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-amber-400 p-1" title="Save to Quick Commands"><i className="fa-regular fa-star text-[12px]" /></button>
                                         </div>
                                     ))}
                                 </div>

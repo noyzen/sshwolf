@@ -1,9 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { 
-  ArrowUp, RefreshCw, List, LayoutGrid, Clipboard, FilePlus, FolderPlus, Upload, 
-  Check, Copy, Scissors, Package, Download, Trash, X, CheckCircle2, 
-  SortAsc, SortDesc, Folder, FileText, Edit3, MoreVertical, Edit2, Lock, PackageOpen, CheckSquare 
-} from 'lucide-react';
 import { SubTab, SSHConnection, ClipboardState, FileEntry, ClipboardItem } from './types';
 import { cn } from './utils';
 import { Modal, SimpleInputModal, PermissionsManager, SmartDependencyInstaller, ContextMenu, ContextMenuOption } from './Modals';
@@ -365,34 +360,34 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
           const isArchive = file.filename.match(/\.(zip|tar|tar\.gz|tgz)$/);
           return [
               ...(file.isDirectory ? [
-                  { label: "Open", icon: <Folder size={14}/>, onClick: () => handleNavigate(file.filename) },
-                  { label: "Open in Terminal", icon: <List size={14}/>, onClick: () => onOpenTerminal(currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`) }
+                  { label: "Open", icon: <i className="fa-regular fa-folder text-[14px]"/>, onClick: () => handleNavigate(file.filename) },
+                  { label: "Open in Terminal", icon: <i className="fa-solid fa-list-ul text-[14px]"/>, onClick: () => onOpenTerminal(currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`) }
               ] : [
-                  { label: "Edit", icon: <Edit2 size={14}/>, onClick: () => openEditor(file) }
+                  { label: "Edit", icon: <i className="fa-solid fa-pen-to-square text-[14px]"/>, onClick: () => openEditor(file) }
               ]),
               { separator: true, label: "", onClick: () => {} },
-              { label: "Rename", icon: <Edit3 size={14}/>, onClick: () => setShowRename({item: file, name: file.filename}) },
-              { label: "Permissions", icon: <Lock size={14}/>, onClick: () => setShowPermissions(file) },
+              { label: "Rename", icon: <i className="fa-solid fa-pen text-[14px]"/>, onClick: () => setShowRename({item: file, name: file.filename}) },
+              { label: "Permissions", icon: <i className="fa-solid fa-lock text-[14px]"/>, onClick: () => setShowPermissions(file) },
               { separator: true, label: "", onClick: () => {} },
-              { label: "Copy", icon: <Copy size={14}/>, onClick: () => handleCopy([file]) },
-              { label: "Cut", icon: <Scissors size={14}/>, onClick: () => handleCut([file]) },
-              { label: "Compress (Zip)", icon: <Package size={14}/>, onClick: () => setShowArchive('archive') },
-              ...(isArchive ? [{ label: "Extract Here", icon: <PackageOpen size={14}/>, onClick: () => handleExtract(file) }] : []),
+              { label: "Copy", icon: <i className="fa-regular fa-copy text-[14px]"/>, onClick: () => handleCopy([file]) },
+              { label: "Cut", icon: <i className="fa-solid fa-scissors text-[14px]"/>, onClick: () => handleCut([file]) },
+              { label: "Compress (Zip)", icon: <i className="fa-solid fa-box-archive text-[14px]"/>, onClick: () => setShowArchive('archive') },
+              ...(isArchive ? [{ label: "Extract Here", icon: <i className="fa-solid fa-box-open text-[14px]"/>, onClick: () => handleExtract(file) }] : []),
               { separator: true, label: "", onClick: () => {} },
-              { label: "Download", icon: <Download size={14}/>, onClick: () => handleDownload([file]) },
-              { label: "Delete", icon: <Trash size={14}/>, onClick: () => handleDeleteItem(file), danger: true }
+              { label: "Download", icon: <i className="fa-solid fa-download text-[14px]"/>, onClick: () => handleDownload([file]) },
+              { label: "Delete", icon: <i className="fa-solid fa-trash-can text-[14px]"/>, onClick: () => handleDeleteItem(file), danger: true }
           ];
       }
       return [
-          { label: "New File", icon: <FilePlus size={14}/>, onClick: () => setShowNewFile(true) },
-          { label: "New Folder", icon: <FolderPlus size={14}/>, onClick: () => setShowNewFolder(true) },
+          { label: "New File", icon: <i className="fa-solid fa-file-circle-plus text-[14px]"/>, onClick: () => setShowNewFile(true) },
+          { label: "New Folder", icon: <i className="fa-solid fa-folder-plus text-[14px]"/>, onClick: () => setShowNewFolder(true) },
           { separator: true, label: "", onClick: () => {} },
-          { label: "Paste", icon: <Clipboard size={14}/>, onClick: handlePaste },
+          { label: "Paste", icon: <i className="fa-regular fa-clipboard text-[14px]"/>, onClick: handlePaste },
           { separator: true, label: "", onClick: () => {} },
-          { label: "Compress Selected", icon: <Package size={14}/>, onClick: () => setShowArchive('archive') },
+          { label: "Compress Selected", icon: <i className="fa-solid fa-box-archive text-[14px]"/>, onClick: () => setShowArchive('archive') },
           { separator: true, label: "", onClick: () => {} },
-          { label: "Select All", icon: <CheckCircle2 size={14}/>, onClick: handleSelectAll },
-          { label: "Refresh", icon: <RefreshCw size={14}/>, onClick: () => refreshFiles(currentPath) }
+          { label: "Select All", icon: <i className="fa-solid fa-circle-check text-[14px]"/>, onClick: handleSelectAll },
+          { label: "Refresh", icon: <i className="fa-solid fa-rotate text-[14px]"/>, onClick: () => refreshFiles(currentPath) }
       ];
   };
 
@@ -401,23 +396,23 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
        {/* Address Bar */}
        <div className="h-12 border-b border-slate-800 flex items-center px-4 gap-3 bg-slate-950/50 shrink-0" onClick={e => e.stopPropagation()}>
           <div className="flex gap-1">
-             <button onClick={handleUpDir} disabled={currentPath === '/'} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white disabled:opacity-30 transition-colors border border-slate-700/50"><ArrowUp size={16} /></button>
-             <button onClick={() => refreshFiles(currentPath)} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors border border-slate-700/50"><RefreshCw size={16} className={isLoading ? "animate-spin" : ""} /></button>
+             <button onClick={handleUpDir} disabled={currentPath === '/'} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white disabled:opacity-30 transition-colors border border-slate-700/50"><i className="fa-solid fa-arrow-up text-[16px]" /></button>
+             <button onClick={() => refreshFiles(currentPath)} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors border border-slate-700/50"><i className={cn("fa-solid fa-rotate text-[16px]", isLoading && "fa-spin")} /></button>
           </div>
           <form onSubmit={(e) => { e.preventDefault(); refreshFiles(pathInput); }} className="flex-1">
              <input type="text" value={pathInput} onChange={(e) => setPathInput(e.target.value)} className="w-full bg-slate-900 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 font-mono transition-all" />
           </form>
           <div className="h-6 w-px bg-slate-800 mx-1" />
           <div className="flex bg-slate-900 rounded-lg border border-slate-800 p-0.5">
-             <button onClick={() => setViewMode('list')} className={cn("p-1.5 rounded-md transition-all", viewMode === 'list' ? "bg-slate-700 text-indigo-400 shadow-sm" : "text-slate-500 hover:text-slate-300")} title="List View"><List size={16}/></button>
-             <button onClick={() => setViewMode('grid')} className={cn("p-1.5 rounded-md transition-all", viewMode === 'grid' ? "bg-slate-700 text-indigo-400 shadow-sm" : "text-slate-500 hover:text-slate-300")} title="Grid View"><LayoutGrid size={16}/></button>
+             <button onClick={() => setViewMode('list')} className={cn("p-1.5 rounded-md transition-all", viewMode === 'list' ? "bg-slate-700 text-indigo-400 shadow-sm" : "text-slate-500 hover:text-slate-300")} title="List View"><i className="fa-solid fa-list-ul text-[16px]"/></button>
+             <button onClick={() => setViewMode('grid')} className={cn("p-1.5 rounded-md transition-all", viewMode === 'grid' ? "bg-slate-700 text-indigo-400 shadow-sm" : "text-slate-500 hover:text-slate-300")} title="Grid View"><i className="fa-solid fa-table-cells text-[16px]"/></button>
           </div>
           <div className="h-6 w-px bg-slate-800 mx-1" />
           <div className="flex gap-1">
-              <button onClick={handlePaste} disabled={!clipboard || isPasting || clipboard.connectionId !== subTab.connectionId} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 disabled:opacity-30 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50" title="Paste"><Clipboard size={14} /> Paste</button>
-              <button onClick={() => setShowNewFile(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FilePlus size={14} /></button>
-              <button onClick={() => setShowNewFolder(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FolderPlus size={14} /></button>
-              <button onClick={async () => { await window.electron?.sftpUpload(subTab.connectionId, currentPath); refreshFiles(currentPath); }} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 hover:text-indigo-300 rounded-lg text-xs font-medium transition-colors border border-indigo-500/20"><Upload size={14} /> Upload</button>
+              <button onClick={handlePaste} disabled={!clipboard || isPasting || clipboard.connectionId !== subTab.connectionId} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 disabled:opacity-30 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50" title="Paste"><i className="fa-regular fa-clipboard text-[14px]" /> Paste</button>
+              <button onClick={() => setShowNewFile(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><i className="fa-solid fa-file-circle-plus text-[14px]" /></button>
+              <button onClick={() => setShowNewFolder(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><i className="fa-solid fa-folder-plus text-[14px]" /></button>
+              <button onClick={async () => { await window.electron?.sftpUpload(subTab.connectionId, currentPath); refreshFiles(currentPath); }} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 hover:text-indigo-300 rounded-lg text-xs font-medium transition-colors border border-indigo-500/20"><i className="fa-solid fa-upload text-[14px]" /> Upload</button>
           </div>
        </div>
 
@@ -426,17 +421,17 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
            <div className="bg-indigo-900/95 border-b border-indigo-500/30 text-white px-4 py-2 shadow-xl animate-in slide-in-from-top-2 duration-200 shrink-0" onClick={e => e.stopPropagation()}>
              <div className="flex items-center justify-between">
                <div className="flex items-center gap-3">
-                   <div className="bg-indigo-500/20 p-1.5 rounded-full"><Check size={14} className="text-indigo-300"/></div>
+                   <div className="bg-indigo-500/20 p-1.5 rounded-full"><i className="fa-solid fa-check text-[14px] text-indigo-300"/></div>
                    <span className="text-sm font-medium">{selected.size} selected</span>
                </div>
                <div className="flex items-center gap-2">
-                   <button onClick={() => handleCopy()} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Copy"><Copy size={16} /></button>
-                   <button onClick={() => handleCut()} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Cut"><Scissors size={16} /></button>
-                   <button onClick={() => setShowArchive('archive')} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Zip"><Package size={16} /></button>
+                   <button onClick={() => handleCopy()} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Copy"><i className="fa-regular fa-copy text-[16px]" /></button>
+                   <button onClick={() => handleCut()} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Cut"><i className="fa-solid fa-scissors text-[16px]" /></button>
+                   <button onClick={() => setShowArchive('archive')} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Zip"><i className="fa-solid fa-box-archive text-[16px]" /></button>
                    <div className="w-px h-4 bg-white/20 mx-1"></div>
-                   <button onClick={() => handleDownload()} className="flex items-center gap-2 px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs font-medium transition-colors"><Download size={14} /> Download</button>
-                   <button onClick={() => handleDelete()} className="flex items-center gap-2 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded text-xs font-medium transition-colors border border-red-500/20"><Trash size={14} /> Delete</button>
-                   <button onClick={() => setSelected(new Set())} className="ml-2 p-1 text-indigo-300 hover:text-white"><X size={16}/></button>
+                   <button onClick={() => handleDownload()} className="flex items-center gap-2 px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs font-medium transition-colors"><i className="fa-solid fa-download text-[14px]" /> Download</button>
+                   <button onClick={() => handleDelete()} className="flex items-center gap-2 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded text-xs font-medium transition-colors border border-red-500/20"><i className="fa-solid fa-trash-can text-[14px]" /> Delete</button>
+                   <button onClick={() => setSelected(new Set())} className="ml-2 p-1 text-indigo-300 hover:text-white"><i className="fa-solid fa-xmark text-[16px]"/></button>
                </div>
              </div>
            </div>
@@ -448,12 +443,12 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
              <table className="w-full text-left text-xs border-separate border-spacing-0">
                <thead className="bg-slate-900/80 text-slate-500 sticky top-0 z-10 backdrop-blur-sm shadow-sm select-none">
                  <tr>
-                   <th className="p-3 pl-4 w-10 border-b border-slate-800 text-center"><button onClick={handleSelectAll} className="hover:text-indigo-400"><CheckCircle2 size={16}/></button></th>
+                   <th className="p-3 pl-4 w-10 border-b border-slate-800 text-center"><button onClick={handleSelectAll} className="hover:text-indigo-400"><i className="fa-solid fa-circle-check text-[16px]"/></button></th>
                    <th className="p-3 border-b border-slate-800 cursor-pointer hover:text-slate-300 transition-colors" onClick={() => handleSort('filename')}>
-                       <div className="flex items-center gap-2">Name {sortConfig.key === 'filename' && (sortConfig.direction === 'asc' ? <SortAsc size={12}/> : <SortDesc size={12}/>)}</div>
+                       <div className="flex items-center gap-2">Name {sortConfig.key === 'filename' && (sortConfig.direction === 'asc' ? <i className="fa-solid fa-arrow-down-a-z text-[12px]"/> : <i className="fa-solid fa-arrow-down-z-a text-[12px]"/>)}</div>
                    </th>
                    <th className="p-3 w-24 border-b border-slate-800 cursor-pointer hover:text-slate-300 transition-colors" onClick={() => handleSort('size')}>
-                       <div className="flex items-center gap-2">Size {sortConfig.key === 'size' && (sortConfig.direction === 'asc' ? <SortAsc size={12}/> : <SortDesc size={12}/>)}</div>
+                       <div className="flex items-center gap-2">Size {sortConfig.key === 'size' && (sortConfig.direction === 'asc' ? <i className="fa-solid fa-arrow-down-a-z text-[12px]"/> : <i className="fa-solid fa-arrow-down-z-a text-[12px]"/>)}</div>
                    </th>
                    <th className="p-3 w-24 border-b border-slate-800">Perms</th>
                    <th className="p-3 w-32 text-right pr-6 border-b border-slate-800">Actions</th>
@@ -472,8 +467,8 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
                          className={cn("group transition-colors cursor-pointer select-none", isSelected ? "bg-indigo-900/20 hover:bg-indigo-900/30" : "hover:bg-slate-800/40", isCut && "opacity-50")} 
                        >
                          <td className="p-3 pl-4 text-center">
-                             {isSelected ? <CheckSquare size={16} className="text-indigo-400 mx-auto" /> : (
-                                file.isDirectory ? <Folder size={16} className="text-indigo-400 fill-indigo-400/10 mx-auto" /> : <FileText size={16} className="text-slate-600 mx-auto" />
+                             {isSelected ? <i className="fa-solid fa-square-check text-[16px] text-indigo-400 mx-auto" /> : (
+                                file.isDirectory ? <i className="fa-solid fa-folder text-[16px] text-indigo-400 fill-indigo-400/10 mx-auto" /> : <i className="fa-regular fa-file-lines text-[16px] text-slate-600 mx-auto" />
                              )}
                          </td>
                          <td className={cn("p-3 font-medium", isSelected ? "text-indigo-200" : "text-slate-300")}>{file.filename}</td>
@@ -481,9 +476,9 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
                          <td className="p-3 text-slate-500 font-mono text-[10px] uppercase">{file.attrs.mode.toString(8).slice(-3)}</td>
                          <td className="p-3 text-right pr-6">
                             <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                               <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Rename"><Edit3 size={14} /></button>
-                               <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(file) }} className="p-1.5 hover:bg-slate-700 hover:text-red-400 text-slate-500 rounded" title="Delete"><Trash size={14} /></button>
-                               <button onClick={(e) => { e.stopPropagation(); handleContextMenu(e, file); }} className="p-1.5 hover:bg-slate-700 hover:text-white text-slate-500 rounded"><MoreVertical size={14}/></button>
+                               <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Rename"><i className="fa-solid fa-pen text-[14px]" /></button>
+                               <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(file) }} className="p-1.5 hover:bg-slate-700 hover:text-red-400 text-slate-500 rounded" title="Delete"><i className="fa-solid fa-trash-can text-[14px]" /></button>
+                               <button onClick={(e) => { e.stopPropagation(); handleContextMenu(e, file); }} className="p-1.5 hover:bg-slate-700 hover:text-white text-slate-500 rounded"><i className="fa-solid fa-ellipsis-vertical text-[14px]"/></button>
                             </div>
                          </td>
                        </tr>
@@ -509,23 +504,23 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
                              {/* Selection Checkbox Overlay */}
                              <div className={cn("absolute top-2 left-2 z-10 transition-opacity", isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
                                 <div onClick={(e) => { e.stopPropagation(); toggleSelect(file.filename); }} className={cn("w-5 h-5 rounded border flex items-center justify-center cursor-pointer shadow-sm", isSelected ? "bg-indigo-600 border-indigo-500" : "bg-slate-900/90 border-slate-600 hover:border-slate-400")}>
-                                    {isSelected && <Check size={12} className="text-white" />}
+                                    {isSelected && <i className="fa-solid fa-check text-[12px] text-white" />}
                                 </div>
                              </div>
 
                              {/* Action Toolbar Overlay */}
                              <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                 <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 bg-slate-900/90 hover:bg-indigo-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Rename"><Edit3 size={12}/></button>
-                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(file) }} className="p-1.5 bg-slate-900/90 hover:bg-red-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Delete"><Trash size={12}/></button>
-                                 {!file.isDirectory && <button onClick={(e) => { e.stopPropagation(); openEditor(file) }} className="p-1.5 bg-slate-900/90 hover:bg-emerald-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Edit"><Edit2 size={12}/></button>}
-                                 <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1.5 bg-slate-900/90 hover:bg-amber-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Permissions"><Lock size={12}/></button>
+                                 <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 bg-slate-900/90 hover:bg-indigo-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Rename"><i className="fa-solid fa-pen text-[12px]"/></button>
+                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(file) }} className="p-1.5 bg-slate-900/90 hover:bg-red-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Delete"><i className="fa-solid fa-trash-can text-[12px]"/></button>
+                                 {!file.isDirectory && <button onClick={(e) => { e.stopPropagation(); openEditor(file) }} className="p-1.5 bg-slate-900/90 hover:bg-emerald-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Edit"><i className="fa-solid fa-pen-to-square text-[12px]"/></button>}
+                                 <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1.5 bg-slate-900/90 hover:bg-amber-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Permissions"><i className="fa-solid fa-lock text-[12px]"/></button>
                              </div>
 
                              <div className="flex-1 flex items-center justify-center mt-2">
                                  {file.isDirectory ? (
-                                     <Folder size={40} className={cn("fill-current transition-colors", isSelected ? "text-indigo-400" : "text-slate-600 group-hover:text-indigo-400")} />
+                                     <i className={cn("fa-solid fa-folder text-[40px] fill-current transition-colors", isSelected ? "text-indigo-400" : "text-slate-600 group-hover:text-indigo-400")} />
                                  ) : (
-                                     <FileText size={40} className={cn("transition-colors", isSelected ? "text-slate-200" : "text-slate-700 group-hover:text-slate-500")} />
+                                     <i className={cn("fa-regular fa-file-lines text-[40px] transition-colors", isSelected ? "text-slate-200" : "text-slate-700 group-hover:text-slate-500")} />
                                  )}
                              </div>
                              <span className={cn("text-xs text-center w-full break-words line-clamp-2 leading-tight font-medium mt-2", isSelected ? "text-indigo-200" : "text-slate-400 group-hover:text-slate-300")}>
