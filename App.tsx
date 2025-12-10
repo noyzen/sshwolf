@@ -44,6 +44,34 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-lg", hideCl
   );
 };
 
+const SimpleInputModal = ({ isOpen, onClose, title, onSubmit, placeholder = "", buttonLabel="Create" }: { isOpen: boolean, onClose: () => void, title: string, onSubmit: (val: string) => void, placeholder?: string, buttonLabel?: string }) => {
+  const [value, setValue] = useState("");
+  
+  useEffect(() => {
+    if(isOpen) setValue("");
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={title}>
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(value); }} className="space-y-4">
+        <input 
+          autoFocus 
+          value={value} 
+          onChange={e => setValue(e.target.value)} 
+          placeholder={placeholder}
+          className="w-full bg-slate-950 border border-slate-800 rounded p-3 text-white outline-none focus:border-indigo-500" 
+        />
+        <div className="flex justify-end gap-2">
+           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+           <button type="submit" className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded">{buttonLabel}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+};
+
 const PermCheckbox = ({ label, checked, onChange }: { label: string, checked: boolean, onChange: (v: boolean) => void }) => (
   <div className="flex flex-col items-center justify-center p-2 bg-slate-950 rounded border border-slate-800">
     <span className="text-[10px] text-slate-500 mb-1 font-mono uppercase">{label}</span>
@@ -453,6 +481,8 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }:
   const [editingFile, setEditingFile] = useState<{path: string, content: string} | null>(null);
   const [showRename, setShowRename] = useState<{item: FileEntry, name: string} | null>(null);
   const [showPermissions, setShowPermissions] = useState<FileEntry | null>(null);
+  const [showNewFile, setShowNewFile] = useState(false);
+  const [showNewFolder, setShowNewFolder] = useState(false);
 
   const refreshFiles = useCallback(async (path: string) => {
     setIsLoading(true);
@@ -516,25 +546,25 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }:
   };
 
   // Helper actions
-  const createNewFile = async () => {
-    const name = prompt("File name:");
+  const handleCreateFile = async (name: string) => {
     if (!name || !name.trim()) return;
     try {
         const targetPath = currentPath === '/' ? `/${name.trim()}` : `${currentPath}/${name.trim()}`;
         await window.electron?.sftpWriteFile(subTab.connectionId, targetPath, "");
         refreshFiles(currentPath);
+        setShowNewFile(false);
     } catch (e: any) {
         alert(`Failed to create file: ${e.message}`);
     }
   };
 
-  const createNewFolder = async () => {
-    const name = prompt("Folder name:");
+  const handleCreateFolder = async (name: string) => {
     if (!name || !name.trim()) return;
     try {
         const targetPath = currentPath === '/' ? `/${name.trim()}` : `${currentPath}/${name.trim()}`;
         await window.electron?.sftpCreateFolder(subTab.connectionId, targetPath);
         refreshFiles(currentPath);
+        setShowNewFolder(false);
     } catch (e: any) {
         alert(`Failed to create folder: ${e.message}`);
     }
@@ -555,8 +585,8 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }:
           <button onClick={() => onOpenTerminal(currentPath)} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-indigo-400 transition-colors border border-slate-700/50" title="Open Terminal Here"><Terminal size={16} /></button>
           <div className="h-6 w-px bg-slate-800 mx-1" />
           <div className="flex gap-1">
-              <button onClick={createNewFile} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FilePlus size={14} /> New File</button>
-              <button onClick={createNewFolder} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FolderPlus size={14} /> New Folder</button>
+              <button onClick={() => setShowNewFile(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FilePlus size={14} /> New File</button>
+              <button onClick={() => setShowNewFolder(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FolderPlus size={14} /> New Folder</button>
               <button onClick={async () => { await window.electron?.sftpUpload(subTab.connectionId, currentPath); refreshFiles(currentPath); }} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 hover:text-indigo-300 rounded-lg text-xs font-medium transition-colors border border-indigo-500/20"><Upload size={14} /> Upload</button>
           </div>
        </div>
@@ -610,6 +640,21 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }:
        <Modal isOpen={!!showPermissions} onClose={() => setShowPermissions(null)} title="Permissions Manager" maxWidth="max-w-xl">
           {showPermissions && <PermissionsManager item={showPermissions} currentPath={currentPath} connectionId={subTab.connectionId} onClose={() => setShowPermissions(null)} onRefresh={() => refreshFiles(currentPath)} />}
        </Modal>
+       
+       <SimpleInputModal 
+         isOpen={showNewFile} 
+         onClose={() => setShowNewFile(false)} 
+         title="New File" 
+         placeholder="filename.txt" 
+         onSubmit={handleCreateFile} 
+       />
+       <SimpleInputModal 
+         isOpen={showNewFolder} 
+         onClose={() => setShowNewFolder(false)} 
+         title="New Folder" 
+         placeholder="Folder Name" 
+         onSubmit={handleCreateFolder} 
+       />
     </div>
   );
 };
