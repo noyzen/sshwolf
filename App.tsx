@@ -9,7 +9,7 @@ import {
   Minus, AlignLeft, AlertTriangle, Search, History, Play, Star,
   Loader2, Copy, Scissors, Clipboard, LayoutGrid, List, Check,
   MoreVertical, SortAsc, SortDesc, MousePointer2, ChevronRight,
-  File as FileIcon, CheckCircle2
+  File as FileIcon, CheckCircle2, Package, PackageOpen
 } from 'lucide-react';
 import { SSHConnection, FileEntry, ServerSession, SubTab, QuickCommand, ClipboardState, ClipboardItem } from './types';
 import clsx from 'clsx';
@@ -46,12 +46,12 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-lg", hideCl
   );
 };
 
-const SimpleInputModal = ({ isOpen, onClose, title, onSubmit, placeholder = "", buttonLabel="Create" }: { isOpen: boolean, onClose: () => void, title: string, onSubmit: (val: string) => void, placeholder?: string, buttonLabel?: string }) => {
-  const [value, setValue] = useState("");
+const SimpleInputModal = ({ isOpen, onClose, title, onSubmit, placeholder = "", buttonLabel="Create", initialValue="" }: { isOpen: boolean, onClose: () => void, title: string, onSubmit: (val: string) => void, placeholder?: string, buttonLabel?: string, initialValue?: string }) => {
+  const [value, setValue] = useState(initialValue);
   
   useEffect(() => {
-    if(isOpen) setValue("");
-  }, [isOpen]);
+    if(isOpen) setValue(initialValue);
+  }, [isOpen, initialValue]);
 
   if (!isOpen) return null;
 
@@ -336,7 +336,6 @@ const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab, conne
 };
 
 // --- Terminal Pane ---
-// (Kept largely the same, included for completeness of file)
 
 const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connection: SSHConnection, visible: boolean }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -344,43 +343,7 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
   const fitAddonRef = useRef<FitAddon | null>(null);
   const connectedRef = useRef(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [quickCommands, setQuickCommands] = useState<QuickCommand[]>([]);
-  const [cmdHistory, setCmdHistory] = useState<string[]>([]);
-  const [showQuickCmds, setShowQuickCmds] = useState(false);
-  const [inputCmd, setInputCmd] = useState('');
-  const [searchFilter, setSearchFilter] = useState('');
-
-  useEffect(() => {
-    const saved = localStorage.getItem('quick-commands');
-    if (saved) setQuickCommands(JSON.parse(saved));
-    const savedHist = localStorage.getItem('cmd-history');
-    if (savedHist) setCmdHistory(JSON.parse(savedHist));
-  }, []);
-
-  const saveQuickCommand = (name: string, cmd: string) => {
-    if (!name || !cmd) return;
-    const newCmd = { id: crypto.randomUUID(), name, command: cmd };
-    const updated = [...quickCommands, newCmd];
-    setQuickCommands(updated);
-    localStorage.setItem('quick-commands', JSON.stringify(updated));
-  };
-  
-  const deleteQuickCommand = (id: string) => {
-    const updated = quickCommands.filter(c => c.id !== id);
-    setQuickCommands(updated);
-    localStorage.setItem('quick-commands', JSON.stringify(updated));
-  };
-
-  const runCommand = (cmd: string, saveToHistory = true) => {
-      window.electron?.sshWrite(subTab.connectionId, cmd + '\r');
-      if (saveToHistory && cmd.trim()) {
-          const newHist = [cmd, ...cmdHistory.filter(c => c !== cmd)].slice(0, 50);
-          setCmdHistory(newHist);
-          localStorage.setItem('cmd-history', JSON.stringify(newHist));
-      }
-      setShowQuickCmds(false);
-      setInputCmd('');
-  };
+  const [contextMenu, setContextMenu] = useState<{x: number, y: number, options: ContextMenuOption[]} | null>(null);
 
   useEffect(() => {
     if (!visible || connectedRef.current) return;
@@ -465,75 +428,48 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
     }
   }, [visible]);
 
-  const filteredQuickCmds = quickCommands.filter(c => c.name.toLowerCase().includes(searchFilter.toLowerCase()) || c.command.toLowerCase().includes(searchFilter.toLowerCase()));
-  const filteredHistory = cmdHistory.filter(c => c.toLowerCase().includes(searchFilter.toLowerCase()));
+  const handleRightClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const selection = xtermRef.current?.getSelection();
+    setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        options: [
+            { 
+                label: "Copy", 
+                icon: <Copy size={14}/>, 
+                onClick: () => { 
+                    navigator.clipboard.writeText(selection || ''); 
+                    setContextMenu(null);
+                } 
+            },
+            { 
+                label: "Paste", 
+                icon: <Clipboard size={14}/>, 
+                onClick: () => { 
+                    navigator.clipboard.readText().then(text => {
+                        window.electron?.sshWrite(subTab.connectionId, text);
+                    });
+                    setContextMenu(null);
+                } 
+            },
+            { separator: true, label: "", onClick: () => {} },
+            { 
+                label: "Cancel (Ctrl+C)", 
+                icon: <X size={14}/>, 
+                onClick: () => {
+                    window.electron?.sshWrite(subTab.connectionId, '\x03');
+                    setContextMenu(null);
+                } 
+            }
+        ]
+    });
+  };
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full" onContextMenu={handleRightClick}>
        <div ref={terminalRef} className="w-full h-full p-1" />
-       <div className="absolute top-4 right-4 z-20">
-            <div className="relative">
-                <button 
-                  onClick={() => setShowQuickCmds(!showQuickCmds)}
-                  className="p-2 bg-slate-800/80 hover:bg-slate-700 backdrop-blur rounded-full text-slate-400 hover:text-amber-400 transition-colors shadow-lg border border-slate-700" 
-                  title="Quick Commands"
-                >
-                  <Zap size={16} />
-                </button>
-                {showQuickCmds && (
-                  <div className="absolute right-0 top-full mt-2 w-80 bg-slate-900 border border-slate-700 rounded-lg shadow-xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[500px]">
-                      <div className="p-3 border-b border-slate-800 space-y-2 bg-slate-950/50 rounded-t-lg">
-                          <div className="relative">
-                              <Search size={14} className="absolute left-3 top-2.5 text-slate-500" />
-                              <input 
-                                autoFocus
-                                placeholder="Filter or Type new command..." 
-                                className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 pl-9 text-xs text-white focus:border-indigo-500 outline-none"
-                                value={inputCmd}
-                                onChange={e => { setInputCmd(e.target.value); setSearchFilter(e.target.value); }}
-                                onKeyDown={e => { if(e.key === 'Enter') runCommand(inputCmd); }}
-                              />
-                          </div>
-                          <div className="flex gap-2">
-                             <button onClick={() => runCommand(inputCmd)} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><Play size={12}/> Run</button>
-                             <button onClick={() => saveQuickCommand(inputCmd, inputCmd)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><Save size={12}/> Save</button>
-                          </div>
-                      </div>
-                      <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-4">
-                          {filteredQuickCmds.length > 0 && (
-                            <div>
-                                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Saved Commands</h4>
-                                <div className="space-y-1">
-                                    {filteredQuickCmds.map(qc => (
-                                        <div key={qc.id} className="flex items-center justify-between group p-2 hover:bg-slate-800 rounded cursor-pointer border border-transparent hover:border-slate-700" onClick={() => runCommand(qc.command, false)}>
-                                        <div className="flex flex-col overflow-hidden">
-                                            <span className="text-sm text-indigo-300 font-medium truncate">{qc.name}</span>
-                                            <span className="text-[10px] text-slate-500 font-mono truncate">{qc.command}</span>
-                                        </div>
-                                        <button onClick={(e) => { e.stopPropagation(); deleteQuickCommand(qc.id) }} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 p-1"><X size={12}/></button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                          )}
-                          {filteredHistory.length > 0 && (
-                             <div>
-                                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1 flex items-center gap-2"><History size={10}/> Recent History</h4>
-                                <div className="space-y-1">
-                                    {filteredHistory.map((cmd, i) => (
-                                        <div key={i} className="flex items-center justify-between group p-2 hover:bg-slate-800 rounded cursor-pointer border border-transparent hover:border-slate-700" onClick={() => runCommand(cmd, false)}>
-                                            <span className="text-xs text-slate-400 font-mono truncate flex-1">{cmd}</span>
-                                            <button onClick={(e) => { e.stopPropagation(); saveQuickCommand(cmd, cmd); }} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-amber-400 p-1" title="Save to Quick Commands"><Star size={12}/></button>
-                                        </div>
-                                    ))}
-                                </div>
-                             </div>
-                          )}
-                      </div>
-                  </div>
-                )}
-            </div>
-       </div>
+       {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} options={contextMenu.options} onClose={() => setContextMenu(null)} />}
     </div>
   );
 };
@@ -549,6 +485,40 @@ interface SFTPPaneProps {
   onOpenFile: (path: string) => void;
   clipboard: ClipboardState | null;
   setClipboard: (state: ClipboardState | null) => void;
+}
+
+const installZipOnServer = async (connectionId: string) => {
+    const check = await window.electron?.sshExec(connectionId, 'which zip');
+    if (check && check.stdout.trim().length > 0) return true;
+
+    if (!confirm("Zip is not installed on the server. Attempt to install it automatically?")) return false;
+
+    // Try common package managers
+    const installCmd = `
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get update && sudo apt-get install -y zip
+    elif command -v yum &> /dev/null; then
+        sudo yum install -y zip
+    elif command -v apk &> /dev/null; then
+        sudo apk add zip
+    else
+        echo "No supported package manager found"
+        exit 1
+    fi
+    `;
+    
+    try {
+        const res = await window.electron?.sshExec(connectionId, installCmd);
+        if (res.code === 0) {
+            alert("Zip installed successfully.");
+            return true;
+        } else {
+            throw new Error(res.stderr || "Installation failed");
+        }
+    } catch (e: any) {
+        alert(`Failed to install zip: ${e.message}\nTry installing 'zip' manually via terminal.`);
+        return false;
+    }
 }
 
 const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, onOpenFile, clipboard, setClipboard }: SFTPPaneProps) => {
@@ -571,6 +541,7 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
   const [showPermissions, setShowPermissions] = useState<FileEntry | null>(null);
   const [showNewFile, setShowNewFile] = useState(false);
   const [showNewFolder, setShowNewFolder] = useState(false);
+  const [showArchive, setShowArchive] = useState<string | null>(null);
   const [isPasting, setIsPasting] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, item?: FileEntry } | null>(null);
 
@@ -675,7 +646,6 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
     onOpenFile(`${currentPath}/${file.filename}`);
   };
 
-  // Improved Selection Logic
   const handleSelect = (file: FileEntry, index: number, e: React.MouseEvent) => {
     e.stopPropagation();
     const filename = file.filename;
@@ -689,15 +659,13 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
     } else if (e.shiftKey && lastSelectedIndex !== -1) {
         const start = Math.min(lastSelectedIndex, index);
         const end = Math.max(lastSelectedIndex, index);
-        const newSelected = new Set(selected); // Keep existing? Windows Explorer logic usually replaces unless Ctrl also held. 
-        // Simple logic: Clear and select range.
+        const newSelected = new Set(selected); 
         const range = new Set<string>();
         for (let i = start; i <= end; i++) {
             range.add(sortedFiles[i].filename);
         }
         setSelected(range);
     } else {
-        // Single Click - Select ONLY this one (standard behavior)
         setSelected(new Set([filename]));
         setLastSelectedIndex(index);
     }
@@ -743,7 +711,6 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
   };
 
   const getSelectedFiles = () => sortedFiles.filter(f => selected.has(f.filename));
-  const getContextFiles = () => contextMenu?.item ? [contextMenu.item] : getSelectedFiles();
 
   const handleCopy = (filesToProcess = getSelectedFiles()) => {
       if (filesToProcess.length === 0) return;
@@ -830,10 +797,50 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
       finally { setIsPasting(false); }
   };
 
-  // --- Context Menu Options ---
+  const handleArchive = async (name: string) => {
+    if (!name || getSelectedFiles().length === 0) return;
+    if (!(await installZipOnServer(subTab.connectionId))) return;
+
+    setIsLoading(true);
+    const filename = name.endsWith('.zip') ? name : name + '.zip';
+    const items = getSelectedFiles().map(f => `"${f.filename}"`).join(' ');
+    
+    try {
+       const cmd = `cd "${currentPath}" && zip -r "${filename}" ${items}`;
+       await window.electron?.sshExec(subTab.connectionId, cmd);
+       setShowArchive(null);
+       refreshFiles(currentPath);
+    } catch (e: any) { alert(e.message); }
+    finally { setIsLoading(false); }
+  };
+
+  const handleExtract = async (file: FileEntry) => {
+     setIsLoading(true);
+     try {
+        let cmd = '';
+        if (file.filename.endsWith('.zip')) {
+            if (!(await installZipOnServer(subTab.connectionId))) { setIsLoading(false); return; }
+            cmd = `cd "${currentPath}" && unzip "${file.filename}"`;
+        } else if (file.filename.endsWith('.tar.gz') || file.filename.endsWith('.tgz')) {
+            cmd = `cd "${currentPath}" && tar -xzf "${file.filename}"`;
+        } else if (file.filename.endsWith('.tar')) {
+            cmd = `cd "${currentPath}" && tar -xf "${file.filename}"`;
+        } else {
+            alert('Unsupported archive format');
+            setIsLoading(false);
+            return;
+        }
+        await window.electron?.sshExec(subTab.connectionId, cmd);
+        refreshFiles(currentPath);
+     } catch (e: any) { alert(e.message); }
+     finally { setIsLoading(false); }
+  };
+
   const getContextMenuOptions = () => {
+      const selectedFiles = getSelectedFiles();
       if (contextMenu?.item) {
           const file = contextMenu.item;
+          const isArchive = file.filename.match(/\.(zip|tar|tar\.gz|tgz)$/);
           return [
               ...(file.isDirectory ? [
                   { label: "Open", icon: <Folder size={14}/>, onClick: () => handleNavigate(file.filename) },
@@ -847,6 +854,8 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
               { separator: true, label: "", onClick: () => {} },
               { label: "Copy", icon: <Copy size={14}/>, onClick: () => handleCopy([file]) },
               { label: "Cut", icon: <Scissors size={14}/>, onClick: () => handleCut([file]) },
+              { label: "Compress (Zip)", icon: <Package size={14}/>, onClick: () => setShowArchive('archive') },
+              ...(isArchive ? [{ label: "Extract Here", icon: <PackageOpen size={14}/>, onClick: () => handleExtract(file) }] : []),
               { separator: true, label: "", onClick: () => {} },
               { label: "Download", icon: <Download size={14}/>, onClick: () => handleDownload([file]) },
               { label: "Delete", icon: <Trash size={14}/>, onClick: () => handleDeleteItem(file), danger: true }
@@ -858,13 +867,15 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
           { separator: true, label: "", onClick: () => {} },
           { label: "Paste", icon: <Clipboard size={14}/>, onClick: handlePaste },
           { separator: true, label: "", onClick: () => {} },
+          { label: "Compress Selected", icon: <Package size={14}/>, onClick: () => setShowArchive('archive') },
+          { separator: true, label: "", onClick: () => {} },
           { label: "Select All", icon: <CheckCircle2 size={14}/>, onClick: handleSelectAll },
           { label: "Refresh", icon: <RefreshCw size={14}/>, onClick: () => refreshFiles(currentPath) }
       ];
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#020617] relative" onClick={() => setSelected(new Set())} onContextMenu={(e) => handleContextMenu(e)}>
+    <div className="flex flex-col h-full bg-[#020617]" onClick={() => setSelected(new Set())} onContextMenu={(e) => handleContextMenu(e)}>
        {/* Address Bar */}
        <div className="h-12 border-b border-slate-800 flex items-center px-4 gap-3 bg-slate-950/50 shrink-0" onClick={e => e.stopPropagation()}>
           <div className="flex gap-1">
@@ -888,9 +899,10 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
           </div>
        </div>
 
-       {/* Bulk Actions Bar */}
+       {/* Bulk Actions Bar (Relative Flow) */}
        {selected.size > 0 && (
-           <div className="absolute top-14 left-4 right-4 z-20 flex items-center justify-between bg-indigo-900/95 border border-indigo-500/30 backdrop-blur-md text-white px-4 py-2 rounded-lg shadow-xl animate-in slide-in-from-top-2 duration-200" onClick={e => e.stopPropagation()}>
+           <div className="bg-indigo-900/95 border-b border-indigo-500/30 text-white px-4 py-2 shadow-xl animate-in slide-in-from-top-2 duration-200 shrink-0" onClick={e => e.stopPropagation()}>
+             <div className="flex items-center justify-between">
                <div className="flex items-center gap-3">
                    <div className="bg-indigo-500/20 p-1.5 rounded-full"><Check size={14} className="text-indigo-300"/></div>
                    <span className="text-sm font-medium">{selected.size} selected</span>
@@ -898,11 +910,13 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
                <div className="flex items-center gap-2">
                    <button onClick={() => handleCopy()} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Copy"><Copy size={16} /></button>
                    <button onClick={() => handleCut()} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Cut"><Scissors size={16} /></button>
+                   <button onClick={() => setShowArchive('archive')} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Zip"><Package size={16} /></button>
                    <div className="w-px h-4 bg-white/20 mx-1"></div>
                    <button onClick={() => handleDownload()} className="flex items-center gap-2 px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs font-medium transition-colors"><Download size={14} /> Download</button>
                    <button onClick={() => handleDelete()} className="flex items-center gap-2 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded text-xs font-medium transition-colors border border-red-500/20"><Trash size={14} /> Delete</button>
                    <button onClick={() => setSelected(new Set())} className="ml-2 p-1 text-indigo-300 hover:text-white"><X size={16}/></button>
                </div>
+             </div>
            </div>
        )}
        
@@ -926,7 +940,7 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
                <tbody className="divide-y divide-slate-800/30">
                  {sortedFiles.map((file, i) => {
                      const isSelected = selected.has(file.filename);
-                     const isCut = clipboard?.op === 'cut' && clipboard.items.some(it => it.filename === file.filename); // simplified check
+                     const isCut = clipboard?.op === 'cut' && clipboard.items.some(it => it.filename === file.filename); 
                      return (
                        <tr 
                          key={file.filename} 
@@ -1020,6 +1034,7 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
        </Modal>
        <SimpleInputModal isOpen={showNewFile} onClose={() => setShowNewFile(false)} title="New File" placeholder="filename.txt" onSubmit={handleCreateFile} />
        <SimpleInputModal isOpen={showNewFolder} onClose={() => setShowNewFolder(false)} title="New Folder" placeholder="Folder Name" onSubmit={handleCreateFolder} />
+       <SimpleInputModal isOpen={!!showArchive} onClose={() => setShowArchive(null)} title="Create Archive" placeholder="archive.zip" onSubmit={handleArchive} buttonLabel="Compress" initialValue={showArchive || ""} />
     </div>
   );
 };
@@ -1027,6 +1042,49 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
 // --- Session View (Server Tab) ---
 
 const SessionView = ({ session, visible, onUpdate, onClose, clipboard, setClipboard }: { session: ServerSession, visible: boolean, onUpdate: (s: ServerSession) => void, onClose: () => void, clipboard: ClipboardState | null, setClipboard: (s: ClipboardState | null) => void }) => {
+  const [showQuickCmds, setShowQuickCmds] = useState(false);
+  const [quickCommands, setQuickCommands] = useState<QuickCommand[]>([]);
+  const [cmdHistory, setCmdHistory] = useState<string[]>([]);
+  const [inputCmd, setInputCmd] = useState('');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('quick-commands');
+    if (saved) setQuickCommands(JSON.parse(saved));
+    const savedHist = localStorage.getItem('cmd-history');
+    if (savedHist) setCmdHistory(JSON.parse(savedHist));
+  }, []);
+
+  const saveQuickCommand = (name: string, cmd: string) => {
+    if (!name || !cmd) return;
+    const newCmd = { id: crypto.randomUUID(), name, command: cmd };
+    const updated = [...quickCommands, newCmd];
+    setQuickCommands(updated);
+    localStorage.setItem('quick-commands', JSON.stringify(updated));
+  };
+
+  const deleteQuickCommand = (id: string) => {
+    const updated = quickCommands.filter(c => c.id !== id);
+    setQuickCommands(updated);
+    localStorage.setItem('quick-commands', JSON.stringify(updated));
+  };
+
+  const runCommand = (cmd: string, saveToHistory = true) => {
+      if (!session.activeSubTabId) return;
+      const tab = session.subTabs.find(t => t.id === session.activeSubTabId);
+      if (tab && tab.type === 'terminal') {
+         window.electron?.sshWrite(tab.connectionId, cmd + '\r');
+         if (saveToHistory && cmd.trim()) {
+            const newHist = [cmd, ...cmdHistory.filter(c => c !== cmd)].slice(0, 50);
+            setCmdHistory(newHist);
+            localStorage.setItem('cmd-history', JSON.stringify(newHist));
+         }
+         setShowQuickCmds(false);
+         setInputCmd('');
+      } else {
+        alert("Quick commands can only be run on a terminal tab.");
+      }
+  };
+
   const addSubTab = (type: 'terminal' | 'sftp' | 'editor', path?: string) => {
     let title = 'Files';
     if (type === 'terminal') title = path ? 'Terminal' : `Terminal ${session.subTabs.filter(t => t.type === 'terminal').length + 1}`;
@@ -1065,9 +1123,15 @@ const SessionView = ({ session, visible, onUpdate, onClose, clipboard, setClipbo
 
   if (!visible) return null; 
 
+  const activeTab = session.subTabs.find(t => t.id === session.activeSubTabId);
+  const isTerminal = activeTab?.type === 'terminal';
+
+  const filteredQuickCmds = quickCommands.filter(c => c.name.toLowerCase().includes(inputCmd.toLowerCase()) || c.command.toLowerCase().includes(inputCmd.toLowerCase()));
+  const filteredHistory = cmdHistory.filter(c => c.toLowerCase().includes(inputCmd.toLowerCase()));
+
   return (
     <div className="flex flex-col h-full w-full">
-      <div className="h-9 bg-[#0f172a] border-b border-slate-800 flex items-center px-2 shrink-0 select-none">
+      <div className="h-9 bg-[#0f172a] border-b border-slate-800 flex items-center px-2 shrink-0 select-none justify-between">
          <div className="flex items-center gap-1 overflow-x-auto flex-1 scrollbar-none min-w-0">
             {session.subTabs.map(tab => (
                <div 
@@ -1094,8 +1158,71 @@ const SessionView = ({ session, visible, onUpdate, onClose, clipboard, setClipbo
               <Plus size={12} /> SFTP
             </button>
          </div>
+         {isTerminal && (
+           <div className="relative ml-2">
+             <button 
+                onClick={() => setShowQuickCmds(!showQuickCmds)}
+                className={cn("flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded transition-colors border", showQuickCmds ? "bg-indigo-600 border-indigo-500 text-white" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white")}
+             >
+                <Zap size={12} /> Commands
+             </button>
+             {showQuickCmds && (
+                  <div className="absolute right-0 top-full mt-2 w-80 bg-slate-900 border border-slate-700 rounded-lg shadow-xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[500px] z-50">
+                      <div className="p-3 border-b border-slate-800 space-y-2 bg-slate-950/50 rounded-t-lg">
+                          <div className="relative">
+                              <Search size={14} className="absolute left-3 top-2.5 text-slate-500" />
+                              <input 
+                                autoFocus
+                                placeholder="Filter or Type command..." 
+                                className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 pl-9 text-xs text-white focus:border-indigo-500 outline-none"
+                                value={inputCmd}
+                                onChange={e => setInputCmd(e.target.value)}
+                                onKeyDown={e => { if(e.key === 'Enter') runCommand(inputCmd); }}
+                              />
+                          </div>
+                          <div className="flex gap-2">
+                             <button onClick={() => runCommand(inputCmd)} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><Play size={12}/> Run</button>
+                             <button onClick={() => saveQuickCommand(inputCmd, inputCmd)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><Save size={12}/> Save</button>
+                          </div>
+                      </div>
+                      <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-4">
+                          {filteredQuickCmds.length > 0 && (
+                            <div>
+                                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Saved Commands</h4>
+                                <div className="space-y-1">
+                                    {filteredQuickCmds.map(qc => (
+                                        <div key={qc.id} className="flex items-center justify-between group p-2 hover:bg-slate-800 rounded cursor-pointer border border-transparent hover:border-slate-700" onClick={() => runCommand(qc.command, false)}>
+                                        <div className="flex flex-col overflow-hidden">
+                                            <span className="text-sm text-indigo-300 font-medium truncate">{qc.name}</span>
+                                            <span className="text-[10px] text-slate-500 font-mono truncate">{qc.command}</span>
+                                        </div>
+                                        <button onClick={(e) => { e.stopPropagation(); deleteQuickCommand(qc.id) }} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 p-1"><X size={12}/></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                          )}
+                          {filteredHistory.length > 0 && (
+                             <div>
+                                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1 flex items-center gap-2"><History size={10}/> Recent History</h4>
+                                <div className="space-y-1">
+                                    {filteredHistory.map((cmd, i) => (
+                                        <div key={i} className="flex items-center justify-between group p-2 hover:bg-slate-800 rounded cursor-pointer border border-transparent hover:border-slate-700" onClick={() => runCommand(cmd, false)}>
+                                            <span className="text-xs text-slate-400 font-mono truncate flex-1">{cmd}</span>
+                                            <button onClick={(e) => { e.stopPropagation(); saveQuickCommand(cmd, cmd); }} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-amber-400 p-1" title="Save to Quick Commands"><Star size={12}/></button>
+                                        </div>
+                                    ))}
+                                </div>
+                             </div>
+                          )}
+                      </div>
+                  </div>
+             )}
+           </div>
+         )}
+         <div className="w-2"></div>
       </div>
-      <div className="flex-1 relative bg-[#020617] overflow-hidden">
+      <div className="flex-1 relative bg-[#020617] overflow-hidden" onClick={() => setShowQuickCmds(false)}>
          {session.subTabs.map(tab => (
             <div key={tab.id} className={cn("absolute inset-0 w-full h-full", session.activeSubTabId === tab.id ? "z-10" : "z-0 invisible")}>
                 {tab.type === 'terminal' ? (
