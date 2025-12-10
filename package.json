@@ -16,7 +16,7 @@
   "build": {
     "appId": "com.sshwolf.app",
     "productName": "SSH Wolf",
-    "asar": false,
+    "asar": true,
     "directories": {
       "output": "dist-electron"
     },
@@ -25,6 +25,8 @@
       "electron/**/*.js"
     ],
     "win": {
+      "signAndEditExecutable": false,
+      "verifyUpdateCodeSignature": false,
       "target": [
         "zip"
       ],
