@@ -1,0 +1,5 @@
+{
+  "name": "SSH Wolf",
+  "description": "A modern, cross-platform SSH client and SFTP file manager built with Electron. Features a dark UI, terminal management, and file operations.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SSH Wolf</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <style>
+      /* Custom Scrollbar for dark theme */
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #0f172a; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #334155; 
+        border-radius: 5px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #475569; 
+      }
+      
+      /* App Drag Region */
+      .titlebar {
+        -webkit-app-region: drag;
+      }
+      .no-drag {
+        -webkit-app-region: no-drag;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.1",
+    "react/": "https://esm.sh/react@^19.2.1/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.559.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "vite": "https://esm.sh/vite@^7.2.7",
+    "clsx": "https://esm.sh/clsx@^2.1.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.1/",
+    "tailwind-merge": "https://esm.sh/tailwind-merge@^3.4.0",
+    "path": "https://esm.sh/path@^0.12.7",
+    "@google/genai": "https://esm.sh/@google/genai@^1.32.0",
+    "electron": "https://esm.sh/electron@^39.2.6",
+    "url": "https://esm.sh/url@^0.11.4",
+    "xterm": "https://esm.sh/xterm@^5.3.0",
+    "fs": "https://esm.sh/fs@^0.0.1-security",
+    "ssh2": "https://esm.sh/ssh2@^1.17.0",
+    "xterm-addon-fit": "https://esm.sh/xterm-addon-fit@^0.8.0"
+  }
+}
+</script>
+</head>
+  <body class="bg-slate-950 text-slate-200 overflow-hidden">
+    <div id="root" class="h-screen w-screen flex flex-col"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
