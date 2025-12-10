@@ -88,6 +88,20 @@ app.on('activate', () => {
   }
 });
 
+// --- System Dialogs ---
+
+ipcMain.handle('select-key-file', async () => {
+  if (!mainWindow) return null;
+  const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [
+      { name: 'SSH Keys', extensions: ['pem', 'key', 'ppk', 'id_rsa', '*'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+  return filePaths.length > 0 ? filePaths[0] : null;
+});
+
 // --- SSH IPC Handlers ---
 
 ipcMain.handle('ssh-connect', async (event, config) => {
@@ -98,7 +112,11 @@ ipcMain.handle('ssh-connect', async (event, config) => {
     conn.on('ready', () => {
       sshClients[connectionId] = conn;
       
-      conn.shell((err, stream) => {
+      // Default to standard terminal size if not provided
+      const rows = config.rows || 24;
+      const cols = config.cols || 80;
+
+      conn.shell({ term: 'xterm-256color', rows, cols }, (err, stream) => {
         if (err) {
           reject(err);
           return;
@@ -123,14 +141,42 @@ ipcMain.handle('ssh-connect', async (event, config) => {
       });
     }).on('error', (err) => {
       reject({ success: false, message: err.message });
-    }).connect({
+    });
+
+    // Build Connection Config
+    const connectConfig: any = {
       host: config.host,
       port: config.port,
       username: config.username,
-      password: config.password,
       readyTimeout: 20000,
-      keepaliveInterval: 1000
-    });
+      keepaliveInterval: 1000,
+      tryKeyboard: true,
+      debug: (msg: string) => console.log(msg) // Optional: for debugging
+    };
+
+    if (config.password) {
+      connectConfig.password = config.password;
+    }
+
+    if (config.privateKeyPath) {
+      try {
+        if (fs.existsSync(config.privateKeyPath)) {
+            connectConfig.privateKey = fs.readFileSync(config.privateKeyPath);
+            if (config.passphrase) {
+                connectConfig.passphrase = config.passphrase;
+            }
+        }
+      } catch (err: any) {
+        reject({ success: false, message: `Failed to read key file: ${err.message}` });
+        return;
+      }
+    }
+
+    try {
+        conn.connect(connectConfig);
+    } catch (err: any) {
+        reject({ success: false, message: err.message });
+    }
   });
 });
 
@@ -280,7 +326,18 @@ ipcMain.handle('sftp-delete', async (event, { connectionId, path: remotePath, is
       };
 
       if (isDirectory) {
-        sftp.rmdir(remotePath, cb);
+        // Recursive delete is often handled better via shell command due to non-empty dirs,
+        // but for safety in SFTP we usually use rmdir which requires empty.
+        // For user convenience, we will use `rm -rf` via ssh exec if it's a directory
+        // This is a design choice for "Powerful" file manager.
+        sftp.end();
+        conn.exec(`rm -rf "${remotePath}"`, (err, stream) => {
+             if (err) reject(err);
+             else stream.on('close', (code: any) => {
+                 if (code === 0) resolve({ success: true });
+                 else reject(new Error(`Exit code ${code}`));
+             });
+        });
       } else {
         sftp.unlink(remotePath, cb);
       }

@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('electron', {
     return () => ipcRenderer.removeListener('ssh-closed', handler);
   },
   
+  selectKeyFile: () => ipcRenderer.invoke('select-key-file'),
+
   // SFTP
   sftpList: (connectionId: string, path: string) => ipcRenderer.invoke('sftp-list', { connectionId, path }),
   sftpUpload: (connectionId: string, remotePath: string) => ipcRenderer.invoke('sftp-upload', { connectionId, remotePath }),

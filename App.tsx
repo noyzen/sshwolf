@@ -4,9 +4,10 @@ import { FitAddon } from 'xterm-addon-fit';
 import { 
   Terminal, Folder, Settings, Plus, Trash, Upload, Download, 
   FileText, X, Server, LogOut, RefreshCw, FolderPlus,
-  Archive, Expand, Edit2, Monitor, ArrowUp, Lock, Edit3
+  Archive, Expand, Edit2, Monitor, ArrowUp, Lock, Edit3,
+  Zap, Save, CheckSquare, Square, Key, Shield
 } from 'lucide-react';
-import { SSHConnection, FileEntry } from './types';
+import { SSHConnection, FileEntry, SavedSessionState, QuickCommand } from './types';
 import clsx from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -20,19 +21,18 @@ const isWindows = navigator.userAgent.includes('Windows');
 
 // --- Types ---
 
-interface Session {
-  id: string; // Unique Session ID (UUID)
-  connection: SSHConnection;
-  startedAt: number;
+interface Session extends SavedSessionState {
+  connected: boolean;
+  isLoaded: boolean; // Has the user clicked the tab yet?
 }
 
 // --- Components ---
 
-const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children?: React.ReactNode }) => {
+const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-lg" }: { isOpen: boolean; onClose: () => void; title: string; children?: React.ReactNode, maxWidth?: string }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+      <div className={cn("bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full overflow-hidden flex flex-col max-h-[90vh]", maxWidth)}>
         <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-950/50 shrink-0">
           <h3 className="text-lg font-semibold text-slate-200">{title}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors p-1 hover:bg-slate-800 rounded">
@@ -49,18 +49,27 @@ const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean; onClose:
 
 // --- Session View Component ---
 
-const SessionView = ({ session, visible, onRemove }: { session: Session; visible: boolean; onRemove: () => void }) => {
-  const [activeTab, setActiveTab] = useState<'terminal' | 'sftp'>('terminal');
+const SessionView = ({ session, visible, onRemove, onUpdateState }: { 
+  session: Session; 
+  visible: boolean; 
+  onRemove: () => void;
+  onUpdateState: (updates: Partial<Session>) => void;
+}) => {
+  const [activeTab, setActiveTab] = useState<'terminal' | 'sftp'>(session.activeView || 'terminal');
   
-  // Terminal
+  // Terminal State
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const connectedRef = useRef(false);
+  const [quickCommands, setQuickCommands] = useState<QuickCommand[]>([]);
+  const [showQuickCmds, setShowQuickCmds] = useState(false);
+  const [newCmdName, setNewCmdName] = useState('');
+  const [newCmdVal, setNewCmdVal] = useState('');
 
-  // SFTP
-  const [currentPath, setCurrentPath] = useState('/root');
-  const [pathInput, setPathInput] = useState('/root');
+  // SFTP State
+  const [currentPath, setCurrentPath] = useState(session.lastPath || '/');
+  const [pathInput, setPathInput] = useState(session.lastPath || '/');
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   
@@ -68,14 +77,40 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
   const [showEditor, setShowEditor] = useState(false);
   const [editingFile, setEditingFile] = useState<{path: string, content: string} | null>(null);
   const [showRename, setShowRename] = useState<{item: FileEntry, name: string} | null>(null);
-  const [showPermissions, setShowPermissions] = useState<{item: FileEntry, mode: string} | null>(null);
+  const [showPermissions, setShowPermissions] = useState<{item: FileEntry, mode: number} | null>(null);
+  const [permRecursive, setPermRecursive] = useState(false);
 
-  // Initialize Connection
+  // Load Quick Commands
   useEffect(() => {
-    if (connectedRef.current) return;
-    
+    const saved = localStorage.getItem('quick-commands');
+    if (saved) setQuickCommands(JSON.parse(saved));
+  }, []);
+
+  const saveQuickCommand = () => {
+    if (!newCmdName || !newCmdVal) return;
+    const newCmd = { id: crypto.randomUUID(), name: newCmdName, command: newCmdVal };
+    const updated = [...quickCommands, newCmd];
+    setQuickCommands(updated);
+    localStorage.setItem('quick-commands', JSON.stringify(updated));
+    setNewCmdName('');
+    setNewCmdVal('');
+  };
+
+  const deleteQuickCommand = (id: string) => {
+    const updated = quickCommands.filter(c => c.id !== id);
+    setQuickCommands(updated);
+    localStorage.setItem('quick-commands', JSON.stringify(updated));
+  }
+
+  // Lazy Connect Logic
+  useEffect(() => {
+    if (!visible) return; // Only start if tab is visible
+    if (connectedRef.current) return; // Already connected
+    if (session.connected) return; // Session marked as connected
+
     const initSession = async () => {
       connectedRef.current = true;
+      onUpdateState({ isLoaded: true, connected: true });
       
       // Init XTerm
       if (terminalRef.current && !xtermRef.current) {
@@ -87,19 +122,44 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
             selectionBackground: '#4338ca',
           },
           fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-          fontSize: 13,
+          fontSize: 14,
           lineHeight: 1.4,
           cursorBlink: true,
           allowProposedApi: true,
+          convertEol: true, // Fixes the "staircase" effect
         });
         
         const fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
         term.open(terminalRef.current);
-        fitAddon.fit();
+        
+        // Wait for DOM to render size
+        setTimeout(() => {
+           fitAddon.fit();
+        }, 100);
         
         xtermRef.current = term;
         fitAddonRef.current = fitAddon;
+
+        // Key Handling (Ctrl+C / Ctrl+V)
+        term.attachCustomKeyEventHandler((arg) => {
+          if (arg.type === 'keydown') {
+            if ((arg.ctrlKey || arg.metaKey) && arg.code === 'KeyC') {
+               const selection = term.getSelection();
+               if (selection) {
+                 navigator.clipboard.writeText(selection);
+                 return false;
+               }
+            }
+            if ((arg.ctrlKey || arg.metaKey) && arg.code === 'KeyV') {
+               navigator.clipboard.readText().then(text => {
+                 window.electron?.sshWrite(session.id, text);
+               });
+               return false;
+            }
+          }
+          return true;
+        });
 
         term.onData(data => {
           window.electron?.sshWrite(session.id, data);
@@ -124,6 +184,7 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
         const cleanupClose = window.electron?.onSSHClosed(({ connectionId }) => {
            if (connectionId === session.id) {
              term.writeln('\r\n\x1b[31mConnection closed.\x1b[0m');
+             onUpdateState({ connected: false });
            }
         });
 
@@ -131,18 +192,21 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
           term.writeln(`\x1b[34mConnecting to ${session.connection.host}...\x1b[0m\r\n`);
           
           // Connect using the SESSION ID
-          await window.electron?.sshConnect({ ...session.connection, id: session.id });
+          await window.electron?.sshConnect({ 
+             ...session.connection, 
+             id: session.id,
+             rows: term.rows,
+             cols: term.cols
+          });
           
           fitAddon.fit();
-          window.electron?.sshResize(session.id, term.cols, term.rows);
           
           // Initial SFTP
-          refreshFiles(session.id, '/root'); 
-          setCurrentPath('/root');
-          setPathInput('/root');
+          refreshFiles(session.id, currentPath); 
 
         } catch (err: any) {
           term.writeln(`\r\n\x1b[31mError: ${err.message}\x1b[0m`);
+          onUpdateState({ connected: false });
         }
 
         return () => {
@@ -157,7 +221,7 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
 
     initSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [visible]);
 
   // Handle Resize Visibility
   useEffect(() => {
@@ -170,6 +234,11 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
       }, 50);
     }
   }, [visible]);
+
+  // Update persistent state when tabs change
+  useEffect(() => {
+    onUpdateState({ activeView: activeTab });
+  }, [activeTab]);
 
   // --- SFTP Logic ---
 
@@ -185,6 +254,7 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
         setFiles(sorted);
         setCurrentPath(path);
         setPathInput(path);
+        onUpdateState({ lastPath: path });
       }
     } catch (err) {
       xtermRef.current?.writeln(`\r\nSFTP Error: ${err}`);
@@ -221,6 +291,17 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
     }
   };
 
+  // --- Permission Helper ---
+  
+  const PermCheckbox = ({ label, checked, onChange }: { label: string, checked: boolean, onChange: (v: boolean) => void }) => (
+    <div className="flex flex-col items-center justify-center p-2 bg-slate-950 rounded border border-slate-800">
+      <span className="text-[10px] text-slate-500 mb-1 font-mono uppercase">{label}</span>
+      <button onClick={() => onChange(!checked)} className={cn("transition-colors", checked ? "text-indigo-400" : "text-slate-700")}>
+        {checked ? <CheckSquare size={18} /> : <Square size={18} />}
+      </button>
+    </div>
+  );
+
   return (
     <div className={cn("absolute inset-0 flex flex-col bg-slate-950", visible ? "z-10" : "z-0 invisible")}>
       {/* Session Toolbar */}
@@ -242,15 +323,56 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
            </div>
          </div>
          {/* Status */}
-         <div className="flex items-center gap-2 text-xs text-slate-500 font-mono">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Connected to {session.connection.host}
+         <div className="flex items-center gap-3">
+             {activeTab === 'terminal' && (
+                <div className="relative">
+                   <button 
+                      onClick={() => setShowQuickCmds(!showQuickCmds)}
+                      className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-amber-400 transition-colors" title="Quick Commands"
+                    >
+                      <Zap size={14} />
+                   </button>
+                   {showQuickCmds && (
+                      <div className="absolute right-0 top-full mt-2 w-64 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-50 p-2">
+                          <h4 className="text-xs font-semibold text-slate-500 mb-2 px-1">QUICK COMMANDS</h4>
+                          <div className="space-y-1 max-h-48 overflow-y-auto">
+                             {quickCommands.map(qc => (
+                               <div key={qc.id} className="flex items-center justify-between group p-1.5 hover:bg-slate-800 rounded cursor-pointer" onClick={() => {
+                                 window.electron?.sshWrite(session.id, qc.command + '\r');
+                                 setShowQuickCmds(false);
+                               }}>
+                                  <span className="text-sm text-slate-300">{qc.name}</span>
+                                  <button onClick={(e) => { e.stopPropagation(); deleteQuickCommand(qc.id) }} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400"><X size={12}/></button>
+                               </div>
+                             ))}
+                          </div>
+                          <div className="border-t border-slate-800 mt-2 pt-2 space-y-2">
+                             <input placeholder="Name (e.g. htop)" className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs" value={newCmdName} onChange={e => setNewCmdName(e.target.value)} />
+                             <div className="flex gap-1">
+                                <input placeholder="Command" className="flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs" value={newCmdVal} onChange={e => setNewCmdVal(e.target.value)} />
+                                <button onClick={saveQuickCommand} className="bg-indigo-600 text-white rounded px-2 py-1 text-xs"><Plus size={12}/></button>
+                             </div>
+                          </div>
+                      </div>
+                   )}
+                </div>
+             )}
+            <div className="flex items-center gap-2 text-xs text-slate-500 font-mono">
+                <div className={cn("w-2 h-2 rounded-full", session.connected ? "bg-emerald-500 animate-pulse" : "bg-slate-700")} />
+                {session.connected ? `Connected: ${session.connection.host}` : 'Disconnected'}
+            </div>
          </div>
       </div>
 
       <div className="flex-1 relative overflow-hidden">
         {/* Terminal Layer */}
         <div className={cn("absolute inset-0 bg-[#020617] p-1", activeTab === 'terminal' ? "z-10" : "invisible")}>
+           {!session.isLoaded && !visible && (
+             <div className="flex h-full items-center justify-center text-slate-600 flex-col gap-2">
+                <div className="w-8 h-8 rounded-full border-2 border-slate-700 border-t-indigo-500 animate-spin" />
+                <span className="text-xs">Initializing Session...</span>
+             </div>
+           )}
            <div ref={terminalRef} className="w-full h-full" />
         </div>
 
@@ -308,9 +430,15 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
                       key={i} 
                       className="hover:bg-slate-800/40 group transition-colors cursor-pointer"
                       onDoubleClick={() => file.isDirectory ? handleNavigate(file.filename) : handleAction(async () => {
-                          const content = await window.electron?.sftpReadFile(session.id, `${currentPath}/${file.filename}`);
-                          setEditingFile({ path: `${currentPath}/${file.filename}`, content });
-                          setShowEditor(true);
+                          // Check if text based
+                          const ext = file.filename.split('.').pop()?.toLowerCase();
+                          const isText = ['txt', 'js', 'ts', 'tsx', 'json', 'md', 'html', 'css', 'conf', 'cfg', 'log', 'sh', 'py', 'env', 'xml', 'yaml', 'yml'].includes(ext || '');
+                          
+                          if (isText || confirm("This file might not be text. Open editor anyway?")) {
+                              const content = await window.electron?.sftpReadFile(session.id, `${currentPath}/${file.filename}`);
+                              setEditingFile({ path: `${currentPath}/${file.filename}`, content });
+                              setShowEditor(true);
+                          }
                       }, "Read Failed")}
                    >
                      <td className="p-3 pl-6">
@@ -329,7 +457,7 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
                         <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                            {/* Context Actions */}
                            <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Rename"><Edit3 size={14} /></button>
-                           <button onClick={(e) => { e.stopPropagation(); setShowPermissions({item: file, mode: file.attrs.mode.toString(8).slice(-3)}) }} className="p-1.5 hover:bg-slate-700 hover:text-amber-300 text-slate-500 rounded" title="Permissions"><Lock size={14} /></button>
+                           <button onClick={(e) => { e.stopPropagation(); setShowPermissions({item: file, mode: file.attrs.mode}) }} className="p-1.5 hover:bg-slate-700 hover:text-amber-300 text-slate-500 rounded" title="Permissions"><Lock size={14} /></button>
                            
                            {(file.filename.endsWith('.tar.gz') || file.filename.endsWith('.zip')) ? (
                              <button onClick={(e) => { e.stopPropagation(); window.electron?.sshExec(session.id, `cd "${currentPath}" && ${file.filename.endsWith('.zip') ? 'unzip' : 'tar -xzf'} "${file.filename}"`).then(() => refreshFiles(session.id, currentPath)); }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-400 text-slate-500 rounded" title="Extract"><Expand size={14} /></button>
@@ -351,25 +479,32 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
         </div>
       </div>
 
-      {/* Editor Modal */}
+      {/* Built-in Editor Modal */}
       {showEditor && editingFile && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col animate-in fade-in duration-100">
-           <div className="h-12 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4">
-              <span className="font-mono text-xs text-slate-400">{editingFile.path}</span>
-              <div className="flex gap-2">
-                 <button onClick={() => setShowEditor(false)} className="px-3 py-1 text-sm hover:text-white text-slate-400 transition-colors">Cancel</button>
+        <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col animate-in slide-in-from-bottom-5 duration-200">
+           <div className="h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 shadow-md">
+              <div className="flex items-center gap-3">
+                 <FileText className="text-indigo-400" size={18} />
+                 <span className="font-mono text-sm text-slate-300">{editingFile.path}</span>
+              </div>
+              <div className="flex gap-3">
+                 <button onClick={() => setShowEditor(false)} className="px-4 py-2 text-sm font-medium hover:text-white text-slate-400 transition-colors">Cancel</button>
                  <button onClick={() => handleAction(async () => {
                    await window.electron?.sftpWriteFile(session.id, editingFile.path, editingFile.content);
                    setShowEditor(false);
-                 }, "Save Failed")} className="px-3 py-1 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors">Save</button>
+                 }, "Save Failed")} className="flex items-center gap-2 px-6 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg shadow-indigo-500/20 transition-all">
+                   <Save size={16} /> Save Changes
+                 </button>
               </div>
            </div>
-           <textarea 
-             className="flex-1 bg-[#020617] text-slate-200 font-mono text-sm p-4 outline-none resize-none leading-relaxed"
-             value={editingFile.content}
-             onChange={e => setEditingFile({ ...editingFile, content: e.target.value })}
-             spellCheck={false}
-           />
+           <div className="flex-1 relative">
+             <textarea 
+               className="absolute inset-0 w-full h-full bg-[#0d1117] text-slate-200 font-mono text-[13px] p-6 outline-none resize-none leading-relaxed"
+               value={editingFile.content}
+               onChange={e => setEditingFile({ ...editingFile, content: e.target.value })}
+               spellCheck={false}
+             />
+           </div>
         </div>
       )}
 
@@ -387,7 +522,7 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
                    autoFocus
                    value={showRename.name} 
                    onChange={e => setShowRename({...showRename, name: e.target.value})}
-                   className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white outline-none focus:border-indigo-500"
+                   className="w-full bg-slate-950 border border-slate-800 rounded p-3 text-white outline-none focus:border-indigo-500"
                  />
                  <div className="flex justify-end gap-2">
                      <button type="button" onClick={() => setShowRename(null)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
@@ -397,35 +532,91 @@ const SessionView = ({ session, visible, onRemove }: { session: Session; visible
           )}
       </Modal>
 
-      {/* Permissions Modal */}
-      <Modal isOpen={!!showPermissions} onClose={() => setShowPermissions(null)} title="Change Permissions">
-          {showPermissions && (
-             <form onSubmit={(e) => {
-                 e.preventDefault();
-                 handleAction(async () => {
-                     const mode = parseInt(showPermissions.mode, 8);
-                     await window.electron?.sftpChmod(session.id, `${currentPath}/${showPermissions.item.filename}`, mode);
-                     setShowPermissions(null);
-                 }, "Chmod Failed");
-             }} className="space-y-4">
-                 <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                        <label className="text-xs text-slate-500 uppercase block mb-1">Octal Mode (e.g. 755)</label>
-                        <input 
-                            autoFocus
-                            value={showPermissions.mode} 
-                            onChange={e => setShowPermissions({...showPermissions, mode: e.target.value})}
-                            maxLength={3}
-                            className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white outline-none focus:border-indigo-500 font-mono"
-                        />
+      {/* Advanced Permission Manager */}
+      <Modal isOpen={!!showPermissions} onClose={() => setShowPermissions(null)} title="Permissions Manager" maxWidth="max-w-xl">
+          {showPermissions && (() => {
+             // Decode Octal
+             const currentOctal = showPermissions.mode.toString(8).slice(-3);
+             const [own, grp, pub] = currentOctal.split('').map(Number);
+
+             // State for Checkboxes
+             const [perms, setPerms] = useState({
+               own: { r: (own & 4) > 0, w: (own & 2) > 0, x: (own & 1) > 0 },
+               grp: { r: (grp & 4) > 0, w: (grp & 2) > 0, x: (grp & 1) > 0 },
+               pub: { r: (pub & 4) > 0, w: (pub & 2) > 0, x: (pub & 1) > 0 },
+             });
+             
+             // Calculate Octal from State
+             const calculateOctal = () => {
+                const getDigit = (p: {r: boolean, w: boolean, x: boolean}) => (p.r ? 4 : 0) + (p.w ? 2 : 0) + (p.x ? 1 : 0);
+                return `${getDigit(perms.own)}${getDigit(perms.grp)}${getDigit(perms.pub)}`;
+             }
+             
+             const updatePerm = (cat: 'own'|'grp'|'pub', type: 'r'|'w'|'x', val: boolean) => {
+               setPerms(prev => ({ ...prev, [cat]: { ...prev[cat], [type]: val } }));
+             }
+
+             return (
+               <div className="space-y-6">
+                 <div className="grid grid-cols-4 gap-4 text-center">
+                    <div className="col-span-1"></div>
+                    <div className="text-sm font-semibold text-slate-400">Read</div>
+                    <div className="text-sm font-semibold text-slate-400">Write</div>
+                    <div className="text-sm font-semibold text-slate-400">Execute</div>
+
+                    {/* Owner */}
+                    <div className="flex items-center text-sm font-bold text-slate-200">Owner</div>
+                    <PermCheckbox label="R" checked={perms.own.r} onChange={v => updatePerm('own', 'r', v)} />
+                    <PermCheckbox label="W" checked={perms.own.w} onChange={v => updatePerm('own', 'w', v)} />
+                    <PermCheckbox label="X" checked={perms.own.x} onChange={v => updatePerm('own', 'x', v)} />
+
+                    {/* Group */}
+                    <div className="flex items-center text-sm font-bold text-slate-200">Group</div>
+                    <PermCheckbox label="R" checked={perms.grp.r} onChange={v => updatePerm('grp', 'r', v)} />
+                    <PermCheckbox label="W" checked={perms.grp.w} onChange={v => updatePerm('grp', 'w', v)} />
+                    <PermCheckbox label="X" checked={perms.grp.x} onChange={v => updatePerm('grp', 'x', v)} />
+
+                    {/* Public */}
+                    <div className="flex items-center text-sm font-bold text-slate-200">Public</div>
+                    <PermCheckbox label="R" checked={perms.pub.r} onChange={v => updatePerm('pub', 'r', v)} />
+                    <PermCheckbox label="W" checked={perms.pub.w} onChange={v => updatePerm('pub', 'w', v)} />
+                    <PermCheckbox label="X" checked={perms.pub.x} onChange={v => updatePerm('pub', 'x', v)} />
+                 </div>
+
+                 <div className="flex items-center justify-between bg-slate-950 p-4 rounded-lg border border-slate-800">
+                    <div className="flex items-center gap-3">
+                       <span className="text-sm text-slate-400">Numeric Value:</span>
+                       <span className="font-mono text-xl text-indigo-400 font-bold">{calculateOctal()}</span>
                     </div>
+                    {showPermissions.item.isDirectory && (
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500" checked={permRecursive} onChange={e => setPermRecursive(e.target.checked)} />
+                        <span className="text-sm text-slate-300">Apply recursively</span>
+                      </label>
+                    )}
                  </div>
-                 <div className="flex justify-end gap-2">
+
+                 <div className="flex justify-end gap-2 pt-2">
                      <button type="button" onClick={() => setShowPermissions(null)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-                     <button type="submit" className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded">Update</button>
+                     <button onClick={() => handleAction(async () => {
+                         const octal = parseInt(calculateOctal(), 8);
+                         const targetPath = `${currentPath}/${showPermissions.item.filename}`;
+                         
+                         if (permRecursive && showPermissions.item.isDirectory) {
+                           // Use Exec for recursive
+                           await window.electron?.sshExec(session.id, `chmod -R ${calculateOctal()} "${targetPath}"`);
+                         } else {
+                           await window.electron?.sftpChmod(session.id, targetPath, octal);
+                         }
+                         setShowPermissions(null);
+                         setPermRecursive(false);
+                     }, "Update Failed")} className="px-6 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium shadow-lg shadow-indigo-500/20">
+                       Apply Permissions
+                     </button>
                  </div>
-             </form>
-          )}
+               </div>
+             );
+          })()}
       </Modal>
     </div>
   );
@@ -441,14 +632,46 @@ export default function App() {
   // Modal State
   const [isManagerOpen, setManagerOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<Partial<SSHConnection> | null>(null);
+  const [authType, setAuthType] = useState<'password'|'key'>('password');
+
+  // Load Connections & Sessions on startup
+  useEffect(() => {
+    const savedConns = localStorage.getItem('ssh-connections');
+    if (savedConns) setConnections(JSON.parse(savedConns));
+
+    const savedSessions = localStorage.getItem('ssh-sessions');
+    if (savedSessions) {
+      const parsed = JSON.parse(savedSessions) as SavedSessionState[];
+      // Hydrate sessions (connected=false initially)
+      setSessions(parsed.map(s => ({
+        ...s,
+        connected: false,
+        isLoaded: false
+      })));
+      if (parsed.length > 0) setActiveSessionId(parsed[parsed.length - 1].id);
+      else setManagerOpen(true);
+    } else {
+      setManagerOpen(true);
+    }
+  }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem('ssh-connections');
-    if (saved) {
-      setConnections(JSON.parse(saved));
-    }
-    setManagerOpen(true);
-  }, []);
+      if (editingConnection) {
+          if (editingConnection.privateKeyPath) setAuthType('key');
+          else setAuthType('password');
+      }
+  }, [editingConnection]);
+
+  // Persist sessions whenever they change structure (added/removed/navigated)
+  useEffect(() => {
+    const stateToSave: SavedSessionState[] = sessions.map(s => ({
+      id: s.id,
+      connection: s.connection,
+      activeView: s.activeView,
+      lastPath: s.lastPath
+    }));
+    localStorage.setItem('ssh-sessions', JSON.stringify(stateToSave));
+  }, [sessions]);
 
   const saveConnections = (conns: SSHConnection[]) => {
     setConnections(conns);
@@ -459,7 +682,10 @@ export default function App() {
     const newSession: Session = {
       id: crypto.randomUUID(),
       connection: conn,
-      startedAt: Date.now()
+      activeView: 'terminal',
+      lastPath: '/',
+      connected: false,
+      isLoaded: false // Will trigger load when switched to
     };
     setSessions(prev => [...prev, newSession]);
     setActiveSessionId(newSession.id);
@@ -474,20 +700,30 @@ export default function App() {
       }
       return newSessions;
     });
-    if (sessions.length <= 1) { 
-       setManagerOpen(true);
-    }
+  };
+
+  const updateSessionState = (id: string, updates: Partial<Session>) => {
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
   };
 
   const handleSaveConnection = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingConnection) return;
 
-    if (editingConnection.id) {
-      const updated = connections.map(c => c.id === editingConnection.id ? editingConnection as SSHConnection : c);
+    // Clean up based on auth type
+    const finalConn = { ...editingConnection };
+    if (authType === 'password') {
+        delete finalConn.privateKeyPath;
+        delete finalConn.passphrase;
+    } else {
+        delete finalConn.password;
+    }
+
+    if (finalConn.id) {
+      const updated = connections.map(c => c.id === finalConn.id ? finalConn as SSHConnection : c);
       saveConnections(updated);
     } else {
-      const newConn = { ...editingConnection, id: Math.random().toString(36).substr(2, 9) } as SSHConnection;
+      const newConn = { ...finalConn, id: Math.random().toString(36).substr(2, 9) } as SSHConnection;
       saveConnections([...connections, newConn]);
     }
     setEditingConnection(null);
@@ -497,13 +733,11 @@ export default function App() {
     <div className="flex flex-col h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30">
       
       {/* --- Custom Titlebar --- */}
-      {/* The outer container is DRAGGABLE. Interactive children must be NO-DRAG. */}
       <div className={cn(
         "h-10 flex items-end bg-slate-950 border-b border-slate-800 select-none titlebar w-full z-50 overflow-hidden",
         isMac && "pl-20",
         isWindows && "pr-36" 
       )}>
-        {/* The Tabs Container is a Flex Row */}
         <div className="flex items-center h-full px-2 gap-1 overflow-x-auto w-full scrollbar-none">
           {sessions.map(session => (
             <div 
@@ -551,6 +785,7 @@ export default function App() {
             session={session} 
             visible={activeSessionId === session.id} 
             onRemove={() => closeSession(session.id)}
+            onUpdateState={(u) => updateSessionState(session.id, u)}
           />
         ))}
 
@@ -658,27 +893,85 @@ export default function App() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-               <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Username</label>
-                  <input 
-                    required
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm"
-                    placeholder="root"
-                    value={editingConnection.username || ''}
-                    onChange={e => setEditingConnection({...editingConnection, username: e.target.value})}
-                  />
-               </div>
-               <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Password</label>
-                  <input 
-                    type="password"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm"
-                    placeholder="••••••"
-                    value={editingConnection.password || ''}
-                    onChange={e => setEditingConnection({...editingConnection, password: e.target.value})}
-                  />
-               </div>
+            
+            <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Username</label>
+                <input 
+                  required
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm"
+                  placeholder="root"
+                  value={editingConnection.username || ''}
+                  onChange={e => setEditingConnection({...editingConnection, username: e.target.value})}
+                />
+             </div>
+
+            {/* Authentication Section */}
+            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800 space-y-4">
+                 <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Authentication</label>
+                    <div className="flex bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+                        <button 
+                          type="button" 
+                          onClick={() => setAuthType('password')}
+                          className={cn("px-3 py-1 text-xs font-medium rounded-md transition-all", authType === 'password' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-300")}
+                        >
+                          Password
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={() => setAuthType('key')}
+                          className={cn("px-3 py-1 text-xs font-medium rounded-md transition-all", authType === 'key' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-300")}
+                        >
+                          Private Key
+                        </button>
+                    </div>
+                 </div>
+
+                 {authType === 'password' ? (
+                     <div className="animate-in fade-in zoom-in-95 duration-200">
+                        <input 
+                          type="password"
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm"
+                          placeholder="Password"
+                          value={editingConnection.password || ''}
+                          onChange={e => setEditingConnection({...editingConnection, password: e.target.value})}
+                        />
+                     </div>
+                 ) : (
+                     <div className="space-y-3 animate-in fade-in zoom-in-95 duration-200">
+                         <div className="flex gap-2">
+                             <div className="relative flex-1">
+                                <Key className="absolute left-3 top-3 text-slate-600" size={16} />
+                                <input 
+                                  readOnly
+                                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 pl-10 text-slate-300 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-xs"
+                                  placeholder="No key selected"
+                                  value={editingConnection.privateKeyPath || ''}
+                                />
+                             </div>
+                             <button 
+                               type="button" 
+                               onClick={async () => {
+                                  const path = await window.electron?.selectKeyFile();
+                                  if(path) setEditingConnection({...editingConnection, privateKeyPath: path});
+                               }}
+                               className="px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm border border-slate-700 transition-colors"
+                             >
+                                Browse
+                             </button>
+                         </div>
+                         <div className="relative">
+                            <Shield className="absolute left-3 top-3 text-slate-600" size={16} />
+                            <input 
+                              type="password"
+                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 pl-10 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm"
+                              placeholder="Passphrase (Optional)"
+                              value={editingConnection.passphrase || ''}
+                              onChange={e => setEditingConnection({...editingConnection, passphrase: e.target.value})}
+                            />
+                         </div>
+                     </div>
+                 )}
             </div>
             
             <div className="pt-4 flex justify-between items-center border-t border-slate-800 mt-4">

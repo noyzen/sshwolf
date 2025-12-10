@@ -6,6 +6,7 @@ export interface SSHConnection {
   username: string;
   password?: string;
   privateKeyPath?: string;
+  passphrase?: string;
   lastUsed?: number;
 }
 
@@ -23,15 +24,23 @@ export interface FileEntry {
   isDirectory: boolean;
 }
 
-export interface SSHSession {
-  connectionId: string;
-  connected: boolean;
+export interface QuickCommand {
+  id: string;
+  name: string;
+  command: string;
+}
+
+export interface SavedSessionState {
+  id: string;
+  connection: SSHConnection;
+  activeView: 'terminal' | 'sftp';
+  lastPath: string;
 }
 
 declare global {
   interface Window {
     electron?: {
-      sshConnect: (config: SSHConnection) => Promise<any>;
+      sshConnect: (config: SSHConnection & { term?: string; rows?: number; cols?: number }) => Promise<any>;
       sshWrite: (connectionId: string, data: string) => Promise<void>;
       sshDisconnect: (connectionId: string) => Promise<void>;
       sshResize: (connectionId: string, rows: number, cols: number) => Promise<void>;
@@ -39,6 +48,8 @@ declare global {
       onSSHData: (callback: (data: { connectionId: string, data: string }) => void) => () => void;
       onSSHClosed: (callback: (data: { connectionId: string }) => void) => () => void;
       
+      selectKeyFile: () => Promise<string | null>;
+
       sftpList: (connectionId: string, path: string) => Promise<FileEntry[]>;
       sftpUpload: (connectionId: string, remotePath: string) => Promise<{ success: boolean; cancelled?: boolean }>;
       sftpDownload: (connectionId: string, remoteFile: string) => Promise<{ success: boolean; cancelled?: boolean }>;
