@@ -2,9 +2,9 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 import { Client } from 'ssh2';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
 import { Buffer } from 'buffer';
 import process from 'process';
+import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
