@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { 
   Terminal, Folder, Settings, Plus, Trash, Upload, Download, 
-  FileText, X, Server, LogOut, ChevronRight, RefreshCw, FolderPlus,
-  Archive, Expand
+  FileText, X, Server, LogOut, RefreshCw, FolderPlus,
+  Archive, Expand, Edit2, Monitor
 } from 'lucide-react';
 import { SSHConnection, FileEntry } from './types';
 import clsx from 'clsx';
@@ -18,79 +18,76 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 const isMac = navigator.userAgent.includes('Mac');
 const isWindows = navigator.userAgent.includes('Windows');
 
+// --- Types ---
+
+interface Session {
+  id: string; // Unique Session ID (UUID)
+  connection: SSHConnection;
+  startedAt: number;
+}
+
 // --- Components ---
 
 const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children?: React.ReactNode }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
-        <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-950/50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-950/50 shrink-0">
           <h3 className="text-lg font-semibold text-slate-200">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors p-1 hover:bg-slate-800 rounded">
             <X size={20} />
           </button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="p-6 overflow-y-auto custom-scrollbar">
+          {children}
+        </div>
       </div>
     </div>
   );
 };
 
-// --- Main App ---
+// --- Session View Component ---
 
-export default function App() {
-  const [view, setView] = useState<'connections' | 'session'>('connections');
+const SessionView = ({ session, visible, onRemove }: { session: Session; visible: boolean; onRemove: () => void }) => {
   const [activeTab, setActiveTab] = useState<'terminal' | 'sftp'>('terminal');
-  const [connections, setConnections] = useState<SSHConnection[]>([]);
-  const [activeConnection, setActiveConnection] = useState<SSHConnection | null>(null);
   
-  // Connection Form State
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newConn, setNewConn] = useState<Partial<SSHConnection>>({ port: 22 });
-
-  // Terminal State
+  // Terminal
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const connectedRef = useRef(false);
 
-  // SFTP State
+  // SFTP
   const [currentPath, setCurrentPath] = useState('/root');
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
   const [editingFile, setEditingFile] = useState<{path: string, content: string} | null>(null);
 
-  // Load connections on mount
+  // Initialize Connection
   useEffect(() => {
-    const saved = localStorage.getItem('ssh-connections');
-    if (saved) {
-      setConnections(JSON.parse(saved));
-    }
-  }, []);
-
-  // Save connections
-  const saveConnections = (conns: SSHConnection[]) => {
-    setConnections(conns);
-    localStorage.setItem('ssh-connections', JSON.stringify(conns));
-  };
-
-  const handleConnect = async (conn: SSHConnection) => {
-    setActiveConnection(conn);
-    setView('session');
+    if (connectedRef.current) return;
     
-    // Initialize Terminal
-    setTimeout(async () => {
+    const initSession = async () => {
+      connectedRef.current = true;
+      
+      // Init XTerm
       if (terminalRef.current && !xtermRef.current) {
         const term = new XTerm({
           theme: {
             background: '#020617', // slate-950
             foreground: '#e2e8f0', // slate-200
             cursor: '#6366f1',
+            selectionBackground: '#4338ca',
           },
           fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-          fontSize: 14,
+          fontSize: 13,
+          lineHeight: 1.4,
+          cursorBlink: true,
+          allowProposedApi: true,
         });
+        
         const fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
         term.open(terminalRef.current);
@@ -100,60 +97,82 @@ export default function App() {
         fitAddonRef.current = fitAddon;
 
         term.onData(data => {
-          window.electron?.sshWrite(conn.id, data);
+          window.electron?.sshWrite(session.id, data);
         });
 
-        // Handle resize
+        // Resize handler
         const resizeObserver = new ResizeObserver(() => {
-          fitAddon.fit();
-          window.electron?.sshResize(conn.id, term.cols, term.rows);
+           if (visible) {
+             fitAddon.fit();
+             window.electron?.sshResize(session.id, term.cols, term.rows);
+           }
         });
         resizeObserver.observe(terminalRef.current);
 
-        try {
-          term.writeln('\x1b[34mConnecting to ' + conn.host + '...\x1b[0m\r\n');
-          await window.electron?.sshConnect(conn);
-          window.electron?.sshResize(conn.id, term.cols, term.rows);
-          
-          window.electron?.onSSHData(({ connectionId, data }) => {
-            if (connectionId === conn.id) term.write(data);
-          });
-          
-          window.electron?.onSSHClosed(({ connectionId }) => {
-             if (connectionId === conn.id) {
-               term.writeln('\r\n\x1b[31mConnection closed.\x1b[0m');
-             }
-          });
+        // Cleanup listener for this session
+        const cleanupData = window.electron?.onSSHData(({ connectionId, data }) => {
+          if (connectionId === session.id) {
+            term.write(data);
+          }
+        });
 
-          // Initial SFTP Load
-          refreshFiles(conn.id, '/root'); // Default to root or home
+        const cleanupClose = window.electron?.onSSHClosed(({ connectionId }) => {
+           if (connectionId === session.id) {
+             term.writeln('\r\n\x1b[31mConnection closed.\x1b[0m');
+           }
+        });
+
+        try {
+          term.writeln(`\x1b[34mConnecting to ${session.connection.host}...\x1b[0m\r\n`);
+          
+          // Connect using the SESSION ID, not the connection ID
+          await window.electron?.sshConnect({ ...session.connection, id: session.id });
+          
+          fitAddon.fit();
+          window.electron?.sshResize(session.id, term.cols, term.rows);
+          
+          // Initial SFTP
+          refreshFiles(session.id, '/root'); 
           setCurrentPath('/root');
 
         } catch (err: any) {
           term.writeln(`\r\n\x1b[31mError: ${err.message}\x1b[0m`);
         }
+
+        return () => {
+          resizeObserver.disconnect();
+          cleanupData && cleanupData();
+          cleanupClose && cleanupClose();
+          term.dispose();
+          window.electron?.sshDisconnect(session.id);
+        };
       }
-    }, 100);
-  };
+    };
 
-  const handleDisconnect = async () => {
-    if (activeConnection) {
-      await window.electron?.sshDisconnect(activeConnection.id);
-      setActiveConnection(null);
-      setView('connections');
-      xtermRef.current?.dispose();
-      xtermRef.current = null;
+    initSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Handle Resize Visibility
+  useEffect(() => {
+    if (visible && fitAddonRef.current) {
+      // Small delay to allow layout to settle
+      setTimeout(() => {
+        fitAddonRef.current?.fit();
+        if (xtermRef.current) {
+          window.electron?.sshResize(session.id, xtermRef.current.cols, xtermRef.current.rows);
+        }
+      }, 50);
     }
-  };
+  }, [visible]);
 
-  // --- SFTP Functions ---
+  // --- SFTP Logic (Scoped to Session) ---
 
   const refreshFiles = async (connId: string, path: string) => {
     setIsLoadingFiles(true);
     try {
       const list = await window.electron?.sftpList(connId, path);
       if (list) {
-        // Sort: Folders first, then files
         const sorted = list.sort((a, b) => {
           if (a.isDirectory === b.isDirectory) return a.filename.localeCompare(b.filename);
           return a.isDirectory ? -1 : 1;
@@ -162,7 +181,6 @@ export default function App() {
         setCurrentPath(path);
       }
     } catch (err) {
-      console.error(err);
       xtermRef.current?.writeln(`\r\nSFTP Error: ${err}`);
     } finally {
       setIsLoadingFiles(false);
@@ -170,442 +188,427 @@ export default function App() {
   };
 
   const handleNavigate = (folderName: string) => {
-    if (!activeConnection) return;
     const newPath = currentPath === '/' ? `/${folderName}` : `${currentPath}/${folderName}`;
-    refreshFiles(activeConnection.id, newPath);
+    refreshFiles(session.id, newPath);
   };
 
   const handleUpDir = () => {
-    if (!activeConnection || currentPath === '/') return;
+    if (currentPath === '/') return;
     const parts = currentPath.split('/');
     parts.pop();
     const newPath = parts.length === 1 ? '/' : parts.join('/');
-    refreshFiles(activeConnection.id, newPath);
+    refreshFiles(session.id, newPath);
   };
 
-  const handleUpload = async () => {
-    if (!activeConnection) return;
-    await window.electron?.sftpUpload(activeConnection.id, currentPath);
-    refreshFiles(activeConnection.id, currentPath);
-  };
-
-  const handleDownload = async (filename: string) => {
-    if (!activeConnection) return;
-    const remotePath = currentPath === '/' ? `/${filename}` : `${currentPath}/${filename}`;
-    await window.electron?.sftpDownload(activeConnection.id, remotePath);
-  };
-
-  const handleDelete = async (file: FileEntry) => {
-    if (!activeConnection) return;
-    if (!confirm(`Are you sure you want to delete ${file.filename}?`)) return;
-    const remotePath = currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`;
+  const handleAction = async (action: () => Promise<any>, errorMsg: string) => {
     try {
-      await window.electron?.sftpDelete(activeConnection.id, remotePath, file.isDirectory);
-      refreshFiles(activeConnection.id, currentPath);
-    } catch (e) {
-      alert("Error deleting file");
+      await action();
+      refreshFiles(session.id, currentPath);
+    } catch (e: any) {
+      alert(`${errorMsg}: ${e.message}`);
     }
   };
 
-  const handleCreateFolder = async () => {
-    if (!activeConnection) return;
-    const name = prompt("Folder name:");
-    if (!name) return;
-    const remotePath = currentPath === '/' ? `/${name}` : `${currentPath}/${name}`;
-    try {
-      await window.electron?.sftpCreateFolder(activeConnection.id, remotePath);
-      refreshFiles(activeConnection.id, currentPath);
-    } catch (e) {
-      alert("Error creating folder");
-    }
-  };
-
-  const handleEditFile = async (filename: string) => {
-     if (!activeConnection) return;
-     const remotePath = currentPath === '/' ? `/${filename}` : `${currentPath}/${filename}`;
-     try {
-       const content = await window.electron?.sftpReadFile(activeConnection.id, remotePath);
-       setEditingFile({ path: remotePath, content: content || '' });
-       setShowEditor(true);
-     } catch (e) {
-       alert("Could not read file (maybe binary?)");
-     }
-  };
-
-  const handleSaveFile = async () => {
-    if (!activeConnection || !editingFile) return;
-    try {
-      await window.electron?.sftpWriteFile(activeConnection.id, editingFile.path, editingFile.content);
-      setShowEditor(false);
-      setEditingFile(null);
-    } catch (e) {
-      alert("Error saving file");
-    }
-  };
-
-  const handleZip = async (file: FileEntry) => {
-    if (!activeConnection) return;
-    const remotePath = currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`;
-    const zipName = `${file.filename}.tar.gz`;
-    
-    // We use tar because it's universally available on Linux.
-    // Command: cd currentPath && tar -czf zipName fileName
-    const cmd = `cd "${currentPath}" && tar -czf "${zipName}" "${file.filename}"`;
-    
-    try {
-      const result = await window.electron?.sshExec(activeConnection.id, cmd);
-      if (result && result.code === 0) {
-        refreshFiles(activeConnection.id, currentPath);
-      } else {
-        alert("Zip failed: " + result?.stderr);
-      }
-    } catch (e) {
-      alert("Error executing zip command");
-    }
-  };
-
-  const handleUnzip = async (file: FileEntry) => {
-    if (!activeConnection) return;
-    
-    // Simple logic for .tar.gz and .zip
-    let cmd = '';
-    if (file.filename.endsWith('.tar.gz') || file.filename.endsWith('.tgz')) {
-      cmd = `cd "${currentPath}" && tar -xzf "${file.filename}"`;
-    } else if (file.filename.endsWith('.zip')) {
-      cmd = `cd "${currentPath}" && unzip "${file.filename}"`;
-    } else {
-      alert("Unsupported archive format. Only .tar.gz and .zip supported.");
-      return;
-    }
-
-    try {
-       const result = await window.electron?.sshExec(activeConnection.id, cmd);
-       if (result && result.code === 0) {
-         refreshFiles(activeConnection.id, currentPath);
-       } else {
-         alert("Unzip failed (Make sure unzip/tar is installed): " + result?.stderr);
-       }
-    } catch (e) {
-      alert("Error executing unzip command");
-    }
-  };
-
-  // --- Views ---
-
-  if (view === 'connections') {
-    return (
-      <div className="flex h-screen bg-slate-950 text-slate-200">
-        {/* Sidebar - Removed titlebar class to prevent dragging from here */}
-        <div className={cn(
-          "w-20 lg:w-64 bg-slate-950 border-r border-slate-800 flex flex-col items-center lg:items-start p-4",
-          isMac ? "pt-12" : "pt-8" // Add space for Mac traffic lights
-        )}>
-          <div className="flex items-center gap-3 mb-8 px-2">
-            <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <Terminal className="text-white" size={24} />
-            </div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent hidden lg:block">SSH Wolf</h1>
-          </div>
-          
-          <nav className="flex-1 w-full space-y-2">
-            <button className="w-full flex items-center gap-3 p-3 rounded-lg bg-slate-900 text-indigo-400 border border-slate-800 transition-all">
-              <Server size={20} />
-              <span className="hidden lg:block font-medium">Connections</span>
-            </button>
-            <button className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-slate-900 text-slate-400 hover:text-slate-200 transition-all">
-              <Settings size={20} />
-              <span className="hidden lg:block font-medium">Settings</span>
-            </button>
-          </nav>
-        </div>
-
-        {/* Connection Grid */}
-        <div className="flex-1 p-8 overflow-y-auto titlebar">
-          <div className="flex justify-between items-center mb-8 no-drag">
-            <h2 className="text-2xl font-bold">Saved Connections</h2>
-            <button 
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors font-medium shadow-lg shadow-indigo-500/20"
-            >
-              <Plus size={20} />
-              Add Connection
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 no-drag">
-            {connections.map(conn => (
-              <div key={conn.id} className="group bg-slate-900/50 border border-slate-800 rounded-xl p-5 hover:border-indigo-500/50 transition-all relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                   <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const newConns = connections.filter(c => c.id !== conn.id);
-                      saveConnections(newConns);
-                    }}
-                    className="text-slate-500 hover:text-red-400"
-                   >
-                     <Trash size={18} />
-                   </button>
-                </div>
-                <div className="flex items-start gap-4 mb-4">
-                   <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-indigo-400 group-hover:bg-slate-950 transition-colors">
-                     <Server size={24} />
-                   </div>
-                   <div>
-                     <h3 className="font-bold text-lg text-slate-200">{conn.name}</h3>
-                     <p className="text-slate-500 text-sm">{conn.username}@{conn.host}</p>
-                   </div>
-                </div>
-                <button 
-                  onClick={() => handleConnect(conn)}
-                  className="w-full py-2 rounded-lg bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white font-medium transition-colors"
-                >
-                  Connect
-                </button>
-              </div>
-            ))}
-
-            {connections.length === 0 && (
-              <div className="col-span-full flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-800 rounded-xl text-slate-500">
-                <Server size={48} className="mb-4 opacity-50" />
-                <p>No connections saved. Create one to get started.</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Add Connection Modal */}
-        <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="New Connection">
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            const id = Math.random().toString(36).substr(2, 9);
-            saveConnections([...connections, { ...newConn, id } as SSHConnection]);
-            setShowAddModal(false);
-            setNewConn({ port: 22 });
-          }} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Name</label>
-              <input 
-                required
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder="My Server"
-                value={newConn.name || ''}
-                onChange={e => setNewConn({...newConn, name: e.target.value})}
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-slate-400 mb-1">Host</label>
-                <input 
-                  required
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="192.168.1.1"
-                  value={newConn.host || ''}
-                  onChange={e => setNewConn({...newConn, host: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Port</label>
-                <input 
-                  type="number"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                  value={newConn.port || 22}
-                  onChange={e => setNewConn({...newConn, port: parseInt(e.target.value)})}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-               <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Username</label>
-                  <input 
-                    required
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder="root"
-                    value={newConn.username || ''}
-                    onChange={e => setNewConn({...newConn, username: e.target.value})}
-                  />
-               </div>
-               <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Password</label>
-                  <input 
-                    type="password"
-                    required
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder="••••••"
-                    value={newConn.password || ''}
-                    onChange={e => setNewConn({...newConn, password: e.target.value})}
-                  />
-               </div>
-            </div>
-            <div className="pt-4 flex justify-end gap-3">
-              <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-slate-400 hover:text-white">Cancel</button>
-              <button type="submit" className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium">Save Connection</button>
-            </div>
-          </form>
-        </Modal>
-      </div>
-    );
-  }
-
-  // Session View
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-200">
-      {/* Header */}
-      <header className={cn(
-        "h-14 bg-slate-950 border-b border-slate-800 flex items-center justify-between px-4 titlebar", 
-        isMac && "pl-20", // Move content right on Mac for traffic lights
-        isWindows && "pr-40" // Move content left on Windows for window controls
-      )}>
-        <div className="flex items-center gap-4">
-           <div className="font-bold text-lg flex items-center gap-2">
-             <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]"></div>
-             {activeConnection?.name}
-           </div>
-           <div className="h-6 w-px bg-slate-800 mx-2"></div>
-           <div className="flex p-1 bg-slate-900 rounded-lg border border-slate-800 no-drag">
+    <div className={cn("absolute inset-0 flex flex-col bg-slate-950", visible ? "z-10" : "z-0 invisible")}>
+      {/* Session Toolbar */}
+      <div className="h-10 bg-slate-950 border-b border-slate-800 flex items-center justify-between px-4 shrink-0">
+         <div className="flex items-center gap-4">
+            <div className="flex p-0.5 bg-slate-900 rounded-lg border border-slate-800">
              <button 
                onClick={() => setActiveTab('terminal')}
-               className={cn("px-4 py-1 text-sm rounded-md transition-all flex items-center gap-2", activeTab === 'terminal' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-400 hover:text-slate-200")}
+               className={cn("px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-2", activeTab === 'terminal' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200")}
              >
-               <Terminal size={14} /> Terminal
+               <Terminal size={12} /> Terminal
              </button>
              <button 
                onClick={() => setActiveTab('sftp')}
-               className={cn("px-4 py-1 text-sm rounded-md transition-all flex items-center gap-2", activeTab === 'sftp' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-400 hover:text-slate-200")}
+               className={cn("px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-2", activeTab === 'sftp' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200")}
              >
-               <Folder size={14} /> Files
+               <Folder size={12} /> Files
              </button>
            </div>
-        </div>
-        <button onClick={handleDisconnect} className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-900 rounded-lg transition-colors no-drag">
-          <LogOut size={20} />
-        </button>
-      </header>
+         </div>
+         {/* Breadcrumb for SFTP (Only visible in SFTP tab) */}
+         {activeTab === 'sftp' && (
+           <div className="flex-1 mx-4 overflow-hidden flex items-center justify-center">
+             <div className="flex items-center gap-1 text-xs font-mono text-slate-400 bg-slate-900/50 px-3 py-1 rounded border border-slate-800/50 truncate max-w-full">
+                <span className="text-indigo-400">sftp://{session.connection.host}</span>
+                <span className="text-slate-300">{currentPath}</span>
+             </div>
+           </div>
+         )}
+      </div>
 
-      {/* Main Content */}
-      <div className="flex-1 relative overflow-hidden flex flex-col no-drag">
+      <div className="flex-1 relative overflow-hidden">
         {/* Terminal Layer */}
-        <div className={cn("absolute inset-0 p-1 bg-[#020617]", activeTab === 'terminal' ? 'z-10' : 'z-0 invisible')}>
+        <div className={cn("absolute inset-0 bg-[#020617] p-1", activeTab === 'terminal' ? "z-10" : "invisible")}>
            <div ref={terminalRef} className="w-full h-full" />
         </div>
 
         {/* SFTP Layer */}
-        <div className={cn("absolute inset-0 flex flex-col bg-slate-950 z-10", activeTab === 'sftp' ? 'visible' : 'invisible')}>
-           {/* SFTP Toolbar */}
-           <div className="h-12 border-b border-slate-800 flex items-center px-4 gap-2 bg-slate-950">
-              <button onClick={() => refreshFiles(activeConnection!.id, currentPath)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400">
-                <RefreshCw size={18} className={isLoadingFiles ? "animate-spin" : ""} />
+        <div className={cn("absolute inset-0 flex flex-col bg-[#020617] z-10", activeTab === 'sftp' ? "visible" : "invisible")}>
+           <div className="h-10 border-b border-slate-800 flex items-center px-2 gap-1 bg-slate-950/50">
+              <button onClick={() => refreshFiles(session.id, currentPath)} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors">
+                <RefreshCw size={16} className={isLoadingFiles ? "animate-spin" : ""} />
               </button>
-              <button onClick={handleUpDir} disabled={currentPath === '/'} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 disabled:opacity-30">
-                 <div className="font-bold -mt-2 text-xl">..</div>
+              <button onClick={handleUpDir} disabled={currentPath === '/'} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white disabled:opacity-30 transition-colors">
+                 <div className="font-bold -mt-1 text-lg leading-none">..</div>
               </button>
-              
-              {/* Breadcrumb */}
-              <div className="flex-1 flex items-center gap-1 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-md text-sm font-mono text-slate-300 mx-2 overflow-hidden">
-                 <span className="text-indigo-400">sftp://</span>
-                 {currentPath.split('/').filter(Boolean).map((part, i, arr) => (
-                   <React.Fragment key={i}>
-                      <span className="text-slate-500">/</span>
-                      <span className="cursor-pointer hover:text-white" onClick={() => {
-                        const newPath = '/' + arr.slice(0, i + 1).join('/');
-                        refreshFiles(activeConnection!.id, newPath);
-                      }}>{part}</span>
-                   </React.Fragment>
-                 ))}
-                 {currentPath === '/' && <span className="text-slate-500">/</span>}
-              </div>
-
-              <div className="flex items-center gap-1">
-                 <button onClick={handleCreateFolder} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-md text-sm text-slate-200 border border-slate-700">
-                   <FolderPlus size={16} /> New Folder
-                 </button>
-                 <button onClick={handleUpload} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-md text-sm text-white shadow-lg shadow-indigo-500/20">
-                   <Upload size={16} /> Upload
-                 </button>
-              </div>
+              <div className="h-4 w-px bg-slate-800 mx-1" />
+              <button onClick={() => handleAction(async () => {
+                  const name = prompt("Folder name:");
+                  if(name) await window.electron?.sftpCreateFolder(session.id, currentPath === '/' ? `/${name}` : `${currentPath}/${name}`);
+              }, "Create Folder Failed")} className="flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 rounded text-xs text-slate-300 transition-colors">
+                <FolderPlus size={14} /> New Folder
+              </button>
+              <button onClick={() => handleAction(() => window.electron?.sftpUpload(session.id, currentPath), "Upload Failed")} className="flex items-center gap-1.5 px-2 py-1 hover:bg-slate-800 rounded text-xs text-slate-300 transition-colors">
+                <Upload size={14} /> Upload
+              </button>
            </div>
-
-           {/* File List */}
-           <div className="flex-1 overflow-auto bg-[#020617]">
-             <table className="w-full text-left text-sm">
-               <thead className="bg-slate-900/50 text-slate-400 sticky top-0 z-10 font-medium">
+           
+           <div className="flex-1 overflow-auto custom-scrollbar">
+             <table className="w-full text-left text-xs">
+               <thead className="bg-slate-900/80 text-slate-500 sticky top-0 z-10 backdrop-blur-sm">
                  <tr>
-                   <th className="p-3 pl-4 w-8"></th>
-                   <th className="p-3">Name</th>
-                   <th className="p-3 w-32">Size</th>
-                   <th className="p-3 w-32">Rights</th>
-                   <th className="p-3 w-40 text-right pr-4">Actions</th>
+                   <th className="p-2 pl-4 w-8"></th>
+                   <th className="p-2">Name</th>
+                   <th className="p-2 w-24">Size</th>
+                   <th className="p-2 w-24">Rights</th>
+                   <th className="p-2 w-32 text-right pr-4">Actions</th>
                  </tr>
                </thead>
-               <tbody className="divide-y divide-slate-800/50">
+               <tbody className="divide-y divide-slate-800/30">
                  {files.map((file, i) => (
                    <tr 
                       key={i} 
-                      className="hover:bg-slate-900/40 group transition-colors cursor-pointer"
-                      onDoubleClick={() => file.isDirectory ? handleNavigate(file.filename) : handleEditFile(file.filename)}
+                      className="hover:bg-slate-800/30 group transition-colors cursor-pointer"
+                      onDoubleClick={() => file.isDirectory ? handleNavigate(file.filename) : handleAction(async () => {
+                          const content = await window.electron?.sftpReadFile(session.id, `${currentPath}/${file.filename}`);
+                          setEditingFile({ path: `${currentPath}/${file.filename}`, content });
+                          setShowEditor(true);
+                      }, "Read Failed")}
                    >
-                     <td className="p-3 pl-4 text-slate-400">
-                       {file.isDirectory ? <Folder size={18} className="text-yellow-500 fill-yellow-500/20" /> : <FileText size={18} className="text-slate-500" />}
+                     <td className="p-2 pl-4">
+                       {file.isDirectory ? <Folder size={16} className="text-indigo-400 fill-indigo-400/10" /> : <FileText size={16} className="text-slate-600" />}
                      </td>
-                     <td className="p-3 font-medium text-slate-200">
+                     <td className="p-2 font-medium text-slate-300 group-hover:text-indigo-200">
                        {file.filename}
                      </td>
-                     <td className="p-3 text-slate-500 font-mono text-xs">
+                     <td className="p-2 text-slate-500 font-mono">
                        {file.isDirectory ? '-' : (file.attrs.size / 1024).toFixed(1) + ' KB'}
                      </td>
-                     <td className="p-3 text-slate-500 font-mono text-xs">
+                     <td className="p-2 text-slate-500 font-mono">
                        {file.attrs.mode.toString(8).slice(-3)}
                      </td>
-                     <td className="p-3 text-right pr-4">
-                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                           {/* Context Actions */}
-                           {(file.filename.endsWith('.tar.gz') || file.filename.endsWith('.zip')) && (
-                             <button onClick={(e) => { e.stopPropagation(); handleUnzip(file); }} className="p-1 hover:text-indigo-400" title="Unzip"><Expand size={16} /></button>
+                     <td className="p-2 text-right pr-4">
+                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                           {(file.filename.endsWith('.tar.gz') || file.filename.endsWith('.zip')) ? (
+                             <button onClick={(e) => { e.stopPropagation(); window.electron?.sshExec(session.id, `cd "${currentPath}" && ${file.filename.endsWith('.zip') ? 'unzip' : 'tar -xzf'} "${file.filename}"`).then(() => refreshFiles(session.id, currentPath)); }} className="p-1 hover:bg-indigo-500/20 hover:text-indigo-400 rounded"><Expand size={14} /></button>
+                           ) : (
+                             !file.isDirectory && <button onClick={(e) => { e.stopPropagation(); window.electron?.sshExec(session.id, `cd "${currentPath}" && tar -czf "${file.filename}.tar.gz" "${file.filename}"`).then(() => refreshFiles(session.id, currentPath)); }} className="p-1 hover:bg-indigo-500/20 hover:text-indigo-400 rounded"><Archive size={14} /></button>
                            )}
                            
-                           {!file.filename.endsWith('.tar.gz') && !file.filename.endsWith('.zip') && (
-                             <button onClick={(e) => { e.stopPropagation(); handleZip(file); }} className="p-1 hover:text-indigo-400" title="Zip"><Archive size={16} /></button>
+                           {!file.isDirectory && (
+                             <button onClick={(e) => { e.stopPropagation(); handleAction(async () => window.electron?.sftpDownload(session.id, `${currentPath}/${file.filename}`), "Download Failed")}} className="p-1 hover:bg-green-500/20 hover:text-green-400 rounded"><Download size={14} /></button>
                            )}
-
-                          {!file.isDirectory && (
-                             <>
-                                <button onClick={(e) => { e.stopPropagation(); handleEditFile(file.filename); }} className="p-1 hover:text-indigo-400" title="Edit"><FileText size={16} /></button>
-                                <button onClick={(e) => { e.stopPropagation(); handleDownload(file.filename); }} className="p-1 hover:text-green-400" title="Download"><Download size={16} /></button>
-                             </>
-                          )}
-                          <button onClick={(e) => { e.stopPropagation(); handleDelete(file); }} className="p-1 hover:text-red-400" title="Delete"><Trash size={16} /></button>
+                           <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) handleAction(async () => window.electron?.sftpDelete(session.id, `${currentPath}/${file.filename}`, file.isDirectory), "Delete Failed")}} className="p-1 hover:bg-red-500/20 hover:text-red-400 rounded"><Trash size={14} /></button>
                         </div>
                      </td>
                    </tr>
                  ))}
-                 {files.length === 0 && !isLoadingFiles && (
-                   <tr>
-                     <td colSpan={5} className="p-8 text-center text-slate-500">Directory is empty</td>
-                   </tr>
-                 )}
                </tbody>
              </table>
            </div>
         </div>
       </div>
 
-      {/* Editor Modal */}
-      {showEditor && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex flex-col no-drag">
+      {/* Simple Editor Modal */}
+      {showEditor && editingFile && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col animate-in fade-in duration-100">
            <div className="h-12 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4">
-              <span className="font-mono text-sm text-slate-300">{editingFile?.path}</span>
+              <span className="font-mono text-xs text-slate-400">{editingFile.path}</span>
               <div className="flex gap-2">
-                 <button onClick={() => setShowEditor(false)} className="px-4 py-1.5 text-sm hover:text-white text-slate-400">Cancel</button>
-                 <button onClick={handleSaveFile} className="px-4 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded-md">Save Changes</button>
+                 <button onClick={() => setShowEditor(false)} className="px-3 py-1 text-sm hover:text-white text-slate-400 transition-colors">Cancel</button>
+                 <button onClick={() => handleAction(async () => {
+                   await window.electron?.sftpWriteFile(session.id, editingFile.path, editingFile.content);
+                   setShowEditor(false);
+                 }, "Save Failed")} className="px-3 py-1 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors">Save</button>
               </div>
            </div>
            <textarea 
-             className="flex-1 bg-[#020617] text-slate-200 font-mono text-sm p-4 outline-none resize-none"
-             value={editingFile?.content}
-             onChange={e => setEditingFile(prev => prev ? ({...prev, content: e.target.value}) : null)}
+             className="flex-1 bg-[#020617] text-slate-200 font-mono text-sm p-4 outline-none resize-none leading-relaxed"
+             value={editingFile.content}
+             onChange={e => setEditingFile({ ...editingFile, content: e.target.value })}
+             spellCheck={false}
            />
         </div>
       )}
+    </div>
+  );
+};
+
+// --- Main App Component ---
+
+export default function App() {
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [connections, setConnections] = useState<SSHConnection[]>([]);
+  
+  // Modal State
+  const [isManagerOpen, setManagerOpen] = useState(false);
+  const [editingConnection, setEditingConnection] = useState<Partial<SSHConnection> | null>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('ssh-connections');
+    if (saved) {
+      setConnections(JSON.parse(saved));
+    }
+    // Open manager if no sessions initially
+    setManagerOpen(true);
+  }, []);
+
+  const saveConnections = (conns: SSHConnection[]) => {
+    setConnections(conns);
+    localStorage.setItem('ssh-connections', JSON.stringify(conns));
+  };
+
+  const createSession = (conn: SSHConnection) => {
+    const newSession: Session = {
+      id: crypto.randomUUID(), // Unique session ID
+      connection: conn,
+      startedAt: Date.now()
+    };
+    setSessions(prev => [...prev, newSession]);
+    setActiveSessionId(newSession.id);
+    setManagerOpen(false);
+  };
+
+  const closeSession = (id: string) => {
+    setSessions(prev => {
+      const newSessions = prev.filter(s => s.id !== id);
+      if (activeSessionId === id) {
+        setActiveSessionId(newSessions.length > 0 ? newSessions[newSessions.length - 1].id : null);
+      }
+      return newSessions;
+    });
+    // If no sessions left, open manager
+    if (sessions.length <= 1) { // 1 because we haven't updated state yet in this closure
+       setManagerOpen(true);
+    }
+  };
+
+  const handleSaveConnection = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingConnection) return;
+
+    if (editingConnection.id) {
+      // Edit existing
+      const updated = connections.map(c => c.id === editingConnection.id ? editingConnection as SSHConnection : c);
+      saveConnections(updated);
+    } else {
+      // Create new
+      const newConn = { ...editingConnection, id: Math.random().toString(36).substr(2, 9) } as SSHConnection;
+      saveConnections([...connections, newConn]);
+    }
+    setEditingConnection(null); // Return to list view
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30">
+      
+      {/* --- Custom Titlebar --- */}
+      <div className={cn(
+        "h-10 flex items-end bg-slate-950 border-b border-slate-800 select-none titlebar w-full z-50",
+        isMac && "pl-20", // Traffic lights area
+        isWindows && "pr-36" // Window controls area
+      )}>
+        <div className="flex items-center h-full px-2 gap-1 overflow-x-auto no-drag w-full scrollbar-none">
+          {sessions.map(session => (
+            <div 
+              key={session.id}
+              onClick={() => setActiveSessionId(session.id)}
+              className={cn(
+                "group relative flex items-center gap-2 px-3 h-8 min-w-[140px] max-w-[200px] rounded-t-lg border-t border-x text-sm cursor-pointer transition-all",
+                activeSessionId === session.id 
+                  ? "bg-[#020617] border-slate-700 text-indigo-400 z-10 font-medium shadow-sm" 
+                  : "bg-slate-900/50 border-transparent text-slate-500 hover:bg-slate-900 hover:text-slate-300 mb-0.5"
+              )}
+            >
+               <Monitor size={12} className={activeSessionId === session.id ? "text-indigo-500" : "opacity-50"} />
+               <span className="truncate flex-1">{session.connection.name}</span>
+               <button 
+                 onClick={(e) => { e.stopPropagation(); closeSession(session.id); }}
+                 className="opacity-0 group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400 p-0.5 rounded transition-all"
+               >
+                 <X size={12} />
+               </button>
+               {/* Bottom cover for active tab to blend with content */}
+               {activeSessionId === session.id && (
+                 <div className="absolute -bottom-[1px] left-0 right-0 h-[1px] bg-[#020617] z-20" />
+               )}
+            </div>
+          ))}
+          
+          <button 
+            onClick={() => {
+              setEditingConnection(null);
+              setManagerOpen(true);
+            }}
+            className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-900 text-slate-500 hover:text-indigo-400 transition-colors mb-0.5"
+            title="New Connection"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
+      </div>
+
+      {/* --- Main Content Area --- */}
+      <div className="flex-1 relative overflow-hidden bg-[#020617]">
+        {/* Render all active sessions (hidden/visible) to preserve state */}
+        {sessions.map(session => (
+          <SessionView 
+            key={session.id} 
+            session={session} 
+            visible={activeSessionId === session.id} 
+            onRemove={() => closeSession(session.id)}
+          />
+        ))}
+
+        {sessions.length === 0 && !isManagerOpen && (
+           <div className="flex flex-col items-center justify-center h-full text-slate-600">
+              <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center mb-4 shadow-xl shadow-black/20">
+                <Server size={32} />
+              </div>
+              <h2 className="text-xl font-bold text-slate-400">No Active Sessions</h2>
+              <button onClick={() => setManagerOpen(true)} className="mt-4 text-indigo-400 hover:text-indigo-300 hover:underline">Open Connection Manager</button>
+           </div>
+        )}
+      </div>
+
+      {/* --- Connection Manager Modal --- */}
+      <Modal 
+        isOpen={isManagerOpen} 
+        onClose={() => sessions.length > 0 && setManagerOpen(false)} 
+        title={editingConnection ? (editingConnection.id ? "Edit Connection" : "New Connection") : "Connection Manager"}
+      >
+        {!editingConnection ? (
+          // LIST VIEW
+          <div className="space-y-3">
+             <div className="grid grid-cols-1 gap-3">
+                {connections.map(conn => (
+                  <div key={conn.id} className="group bg-slate-950 border border-slate-800 hover:border-indigo-500/50 rounded-xl p-4 transition-all flex items-center justify-between">
+                     <div className="flex items-center gap-4 cursor-pointer flex-1" onClick={() => createSession(conn)}>
+                        <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center text-indigo-500 shadow-inner">
+                           <Server size={20} />
+                        </div>
+                        <div>
+                           <h4 className="font-bold text-slate-200">{conn.name}</h4>
+                           <p className="text-xs text-slate-500 font-mono">{conn.username}@{conn.host}</p>
+                        </div>
+                     </div>
+                     <div className="flex gap-1">
+                        <button 
+                          onClick={() => setEditingConnection(conn)}
+                          className="p-2 text-slate-500 hover:bg-slate-900 hover:text-indigo-400 rounded-lg transition-colors"
+                          title="Edit"
+                        >
+                           <Edit2 size={16} />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            if(confirm(`Delete ${conn.name}?`)) {
+                               saveConnections(connections.filter(c => c.id !== conn.id));
+                            }
+                          }}
+                          className="p-2 text-slate-500 hover:bg-slate-900 hover:text-red-400 rounded-lg transition-colors"
+                          title="Delete"
+                        >
+                           <Trash size={16} />
+                        </button>
+                        <button 
+                           onClick={() => createSession(conn)}
+                           className="ml-2 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20"
+                        >
+                           Connect
+                        </button>
+                     </div>
+                  </div>
+                ))}
+                
+                <button 
+                  onClick={() => setEditingConnection({ port: 22 })}
+                  className="w-full py-3 border-2 border-dashed border-slate-800 hover:border-slate-700 hover:bg-slate-900/50 text-slate-500 hover:text-slate-300 rounded-xl transition-all flex items-center justify-center gap-2 font-medium"
+                >
+                   <Plus size={18} /> Add New Connection
+                </button>
+             </div>
+          </div>
+        ) : (
+          // EDIT/CREATE VIEW
+          <form onSubmit={handleSaveConnection} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Connection Name</label>
+              <input 
+                required
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700"
+                placeholder="Production Server"
+                value={editingConnection.name || ''}
+                onChange={e => setEditingConnection({...editingConnection, name: e.target.value})}
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Hostname / IP</label>
+                <input 
+                  required
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm"
+                  placeholder="192.168.1.1"
+                  value={editingConnection.host || ''}
+                  onChange={e => setEditingConnection({...editingConnection, host: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Port</label>
+                <input 
+                  type="number"
+                  required
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm"
+                  value={editingConnection.port || 22}
+                  onChange={e => setEditingConnection({...editingConnection, port: parseInt(e.target.value)})}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+               <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Username</label>
+                  <input 
+                    required
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm"
+                    placeholder="root"
+                    value={editingConnection.username || ''}
+                    onChange={e => setEditingConnection({...editingConnection, username: e.target.value})}
+                  />
+               </div>
+               <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Password</label>
+                  <input 
+                    type="password"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm"
+                    placeholder="••••••"
+                    value={editingConnection.password || ''}
+                    onChange={e => setEditingConnection({...editingConnection, password: e.target.value})}
+                  />
+               </div>
+            </div>
+            
+            <div className="pt-4 flex justify-between items-center border-t border-slate-800 mt-4">
+              <button type="button" onClick={() => setEditingConnection(null)} className="text-slate-500 hover:text-slate-300 text-sm font-medium px-2 py-1">Back to list</button>
+              <button type="submit" className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium shadow-lg shadow-indigo-500/20 transition-all">Save Connection</button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }
