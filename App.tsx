@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
@@ -692,8 +690,8 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
               } else {
                   // Copy
                   // Use shell cp command
-                  // Escape double quotes in paths
-                  const escape = (p: string) => p.replace(/"/g, '\\"');
+                  // Improve escaping for shell compatibility
+                  const escape = (p: string) => p.replace(/(["'$`\\])/g,'\\$1');
                   const cmd = `cp -r "${escape(item.path)}" "${escape(destPath)}"`;
                   const result = await window.electron?.sshExec(subTab.connectionId, cmd);
                   if (result && result.code !== 0) {
