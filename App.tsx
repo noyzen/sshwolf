@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { 
@@ -7,7 +7,9 @@ import {
   Archive, Expand, Edit2, Monitor, ArrowUp, Lock, Edit3,
   Zap, Save, CheckSquare, Square, Key, Shield, Type, WrapText,
   Minus, AlignLeft, AlertTriangle, Search, History, Play, Star,
-  Loader2, Copy, Scissors, Clipboard, LayoutGrid, List, Check
+  Loader2, Copy, Scissors, Clipboard, LayoutGrid, List, Check,
+  MoreVertical, SortAsc, SortDesc, MousePointer2, ChevronRight,
+  File as FileIcon, CheckCircle2
 } from 'lucide-react';
 import { SSHConnection, FileEntry, ServerSession, SubTab, QuickCommand, ClipboardState, ClipboardItem } from './types';
 import clsx from 'clsx';
@@ -25,10 +27,9 @@ const isWindows = navigator.userAgent.includes('Windows');
 
 const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-lg", hideClose = false }: { isOpen: boolean; onClose: () => void; title: string; children?: React.ReactNode, maxWidth?: string, hideClose?: boolean }) => {
   if (!isOpen) return null;
-  // Modal sits BELOW the titlebar (top-10) to respect the separate window controls area
   return (
-    <div className="fixed left-0 right-0 bottom-0 top-10 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className={cn("bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full overflow-hidden flex flex-col max-h-[90vh]", maxWidth)}>
+    <div className="fixed inset-0 top-10 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
+      <div className={cn("bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full overflow-hidden flex flex-col max-h-[90vh]", maxWidth)} onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-950/50 shrink-0">
           <h3 className="text-lg font-semibold text-slate-200">{title}</h3>
           {!hideClose && (
@@ -157,7 +158,54 @@ const PermissionsManager = ({ item, currentPath, connectionId, onClose, onRefres
   );
 };
 
-// --- File Editor Pane (Now a SubTab) ---
+// --- Context Menu Component ---
+
+interface ContextMenuOption {
+  label: string;
+  icon?: React.ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+  separator?: boolean;
+}
+
+const ContextMenu = ({ x, y, options, onClose }: { x: number, y: number, options: ContextMenuOption[], onClose: () => void }) => {
+  useEffect(() => {
+    const handleClick = () => onClose();
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, [onClose]);
+
+  // Adjust position to stay in viewport
+  const adjustedX = Math.min(x, window.innerWidth - 220);
+  const adjustedY = Math.min(y, window.innerHeight - (options.length * 36 + 20));
+
+  return (
+    <div 
+      className="fixed z-[9999] w-52 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl py-1 animate-in fade-in zoom-in-95 duration-100"
+      style={{ left: adjustedX, top: adjustedY }}
+      onClick={e => e.stopPropagation()}
+      onContextMenu={e => e.preventDefault()}
+    >
+      {options.map((opt, i) => (
+        <React.Fragment key={i}>
+          {opt.separator && <div className="h-px bg-slate-800 my-1" />}
+          <button
+            onClick={() => { opt.onClick(); onClose(); }}
+            className={cn(
+              "w-full flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors text-left",
+              opt.danger ? "text-red-400 hover:bg-red-500/10" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+            )}
+          >
+            {opt.icon && <span className="opacity-70">{opt.icon}</span>}
+            {opt.label}
+          </button>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
+
+// --- File Editor Pane ---
 
 const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab, connection: SSHConnection, visible: boolean }) => {
   const [content, setContent] = useState("");
@@ -170,7 +218,6 @@ const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab, conne
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const [isConnected, setIsConnected] = useState(false);
 
-  // Load content when visible and not loaded
   useEffect(() => {
     if (visible && !loaded && !loading && !isConnected) {
       loadFile();
@@ -237,7 +284,6 @@ const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab, conne
 
   return (
     <div className="flex flex-col h-full bg-[#1e1e1e] font-sans">
-       {/* Editor Toolbar */}
        <div className="h-12 bg-[#252526] border-b border-[#3e3e42] flex items-center justify-between px-4 shadow-sm shrink-0">
           <div className="flex items-center gap-4 overflow-hidden">
              <div className="flex items-center gap-2 text-slate-300">
@@ -262,8 +308,6 @@ const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab, conne
              </button>
           </div>
        </div>
-       
-       {/* Editor Body */}
        <div className="flex-1 relative bg-[#1e1e1e]">
          {loading && !content ? (
              <div className="absolute inset-0 flex items-center justify-center text-slate-500 gap-2">
@@ -280,22 +324,19 @@ const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab, conne
             />
          )}
        </div>
-       
-       {/* Status Bar */}
        <div className="h-6 bg-[#007acc] text-white text-[11px] flex items-center px-4 justify-between select-none">
            <div className="flex gap-4">
                <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
                <span>UTF-8</span>
            </div>
-           <div>
-               {isConnected ? "Connected" : "Disconnected"}
-           </div>
+           <div>{isConnected ? "Connected" : "Disconnected"}</div>
        </div>
     </div>
   );
 };
 
 // --- Terminal Pane ---
+// (Kept largely the same, included for completeness of file)
 
 const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connection: SSHConnection, visible: boolean }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -303,8 +344,6 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
   const fitAddonRef = useRef<FitAddon | null>(null);
   const connectedRef = useRef(false);
   const [isConnected, setIsConnected] = useState(false);
-  
-  // Quick Commands State
   const [quickCommands, setQuickCommands] = useState<QuickCommand[]>([]);
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [showQuickCmds, setShowQuickCmds] = useState(false);
@@ -314,7 +353,6 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
   useEffect(() => {
     const saved = localStorage.getItem('quick-commands');
     if (saved) setQuickCommands(JSON.parse(saved));
-    
     const savedHist = localStorage.getItem('cmd-history');
     if (savedHist) setCmdHistory(JSON.parse(savedHist));
   }, []);
@@ -344,10 +382,8 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
       setInputCmd('');
   };
 
-  // Only connect when visible and not already connected
   useEffect(() => {
     if (!visible || connectedRef.current) return;
-    
     const initTerminal = async () => {
       connectedRef.current = true;
       if (terminalRef.current && !xtermRef.current) {
@@ -376,9 +412,7 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
           }
           return true;
         });
-        
         term.onData(data => window.electron?.sshWrite(subTab.connectionId, data));
-
         const resizeObserver = new ResizeObserver(() => {
            if (visible) {
              fitAddon.fit();
@@ -386,7 +420,6 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
            }
         });
         resizeObserver.observe(terminalRef.current);
-
         const cleanupData = window.electron?.onSSHData(({ connectionId, data }) => {
           if (connectionId === subTab.connectionId) term.write(data);
         });
@@ -396,26 +429,21 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
              setIsConnected(false);
            }
         });
-
         try {
           term.writeln(`\x1b[34mConnecting to ${connection.host}...\x1b[0m\r\n`);
           await window.electron?.sshConnect({ ...connection, id: subTab.connectionId, rows: term.rows, cols: term.cols });
           setIsConnected(true);
           fitAddon.fit();
-          
-          // Initial Path Navigation
           if (subTab.path && subTab.path !== '/') {
              setTimeout(() => {
                  window.electron?.sshWrite(subTab.connectionId, `cd "${subTab.path}"\r`);
                  window.electron?.sshWrite(subTab.connectionId, `clear\r`);
              }, 800);
           }
-
         } catch (err: any) {
           term.writeln(`\r\n\x1b[31mError: ${err.message}\x1b[0m`);
           setIsConnected(false);
         }
-
         return () => {
           resizeObserver.disconnect();
           cleanupData && cleanupData();
@@ -426,7 +454,6 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
       }
     };
     initTerminal();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   useEffect(() => {
@@ -444,8 +471,6 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
   return (
     <div className="relative w-full h-full">
        <div ref={terminalRef} className="w-full h-full p-1" />
-       
-       {/* Quick Command Overlay Button */}
        <div className="absolute top-4 right-4 z-20">
             <div className="relative">
                 <button 
@@ -457,8 +482,6 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
                 </button>
                 {showQuickCmds && (
                   <div className="absolute right-0 top-full mt-2 w-80 bg-slate-900 border border-slate-700 rounded-lg shadow-xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[500px]">
-                      
-                      {/* Header Input */}
                       <div className="p-3 border-b border-slate-800 space-y-2 bg-slate-950/50 rounded-t-lg">
                           <div className="relative">
                               <Search size={14} className="absolute left-3 top-2.5 text-slate-500" />
@@ -476,9 +499,7 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
                              <button onClick={() => saveQuickCommand(inputCmd, inputCmd)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><Save size={12}/> Save</button>
                           </div>
                       </div>
-
                       <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-4">
-                          {/* Saved Commands */}
                           {filteredQuickCmds.length > 0 && (
                             <div>
                                 <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Saved Commands</h4>
@@ -495,8 +516,6 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
                                 </div>
                             </div>
                           )}
-
-                          {/* History */}
                           {filteredHistory.length > 0 && (
                              <div>
                                 <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1 flex items-center gap-2"><History size={10}/> Recent History</h4>
@@ -509,10 +528,6 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
                                     ))}
                                 </div>
                              </div>
-                          )}
-
-                          {filteredQuickCmds.length === 0 && filteredHistory.length === 0 && (
-                              <div className="text-center py-4 text-slate-600 text-xs italic">No commands found.</div>
                           )}
                       </div>
                   </div>
@@ -543,28 +558,51 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
   const [isLoading, setIsLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  
+  // Selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number>(-1);
   
-  // Modals
+  // Sorting
+  const [sortConfig, setSortConfig] = useState<{key: 'filename'|'size'|'mtime', direction: 'asc'|'desc'}>({ key: 'filename', direction: 'asc' });
+
+  // Modals & Menu
   const [showRename, setShowRename] = useState<{item: FileEntry, name: string} | null>(null);
   const [showPermissions, setShowPermissions] = useState<FileEntry | null>(null);
   const [showNewFile, setShowNewFile] = useState(false);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [isPasting, setIsPasting] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, item?: FileEntry } | null>(null);
+
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+
+  const sortedFiles = useMemo(() => {
+    let sorted = [...files];
+    sorted.sort((a, b) => {
+       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+       let valA, valB;
+       switch(sortConfig.key) {
+           case 'size': valA = a.attrs.size; valB = b.attrs.size; break;
+           case 'mtime': valA = a.attrs.mtime; valB = b.attrs.mtime; break;
+           default: valA = a.filename.toLowerCase(); valB = b.filename.toLowerCase();
+       }
+       if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+       if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+       return 0;
+    });
+    return sorted;
+  }, [files, sortConfig]);
 
   const refreshFiles = useCallback(async (path: string) => {
+    if (!mounted.current) return;
     setIsLoading(true);
     setSelected(new Set());
     setLastSelectedIndex(-1);
     try {
       const list = await window.electron?.sftpList(subTab.connectionId, path);
-      if (list) {
-        const sorted = list.sort((a, b) => {
-          if (a.isDirectory === b.isDirectory) return a.filename.localeCompare(b.filename);
-          return a.isDirectory ? -1 : 1;
-        });
-        setFiles(sorted);
+      if (list && mounted.current) {
+        setFiles(list);
         setCurrentPath(path);
         setPathInput(path);
         onPathChange(path);
@@ -572,44 +610,53 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
       }
     } catch (err: any) {
       console.error(err);
-      if (err.message.includes('Not connected')) setIsConnected(false);
+      if (err.message.includes('Not connected') && mounted.current) setIsConnected(false);
     } finally {
-      setIsLoading(false);
+      if(mounted.current) setIsLoading(false);
     }
   }, [subTab.connectionId, onPathChange]);
 
-  // Connect only when visible
   useEffect(() => {
     if (!visible) return;
     const connectAndLoad = async () => {
         if (!isConnected) {
             try {
                 await window.electron?.sshConnect({ ...connection, id: subTab.connectionId });
-                setIsConnected(true);
-                refreshFiles(currentPath);
+                if(mounted.current) {
+                  setIsConnected(true);
+                  refreshFiles(currentPath);
+                }
             } catch (e) {
                 console.error("SFTP Connect Error", e);
             }
         }
     };
     connectAndLoad();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  // Handle hotkeys (Ctrl+A)
+  // Select All Hotkey
   useEffect(() => {
     if (!visible) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         e.preventDefault();
-        // Select all
-        const all = new Set(files.map(f => f.filename));
-        setSelected(all);
+        handleSelectAll();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [visible, files]);
+
+  const handleSelectAll = () => {
+    setSelected(new Set(files.map(f => f.filename)));
+  };
+
+  const handleSort = (key: 'filename'|'size'|'mtime') => {
+      setSortConfig(current => ({
+          key,
+          direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+      }));
+  };
 
   const handleNavigate = (folderName: string) => {
     const newPath = currentPath === '/' ? `/${folderName}` : `${currentPath}/${folderName}`;
@@ -628,200 +675,196 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
     onOpenFile(`${currentPath}/${file.filename}`);
   };
 
-  // Selection Logic
+  // Improved Selection Logic
   const handleSelect = (file: FileEntry, index: number, e: React.MouseEvent) => {
-    // If not holding ctrl/shift, regular click should clear unless we are clicking inside a selection to drag (not implemented)
-    // Here we implement standard explorer behavior
-    
-    // e.stopPropagation() is handled in the wrapper
+    e.stopPropagation();
     const filename = file.filename;
-    let newSelected = new Set(selected);
-
+    
     if (e.ctrlKey || e.metaKey) {
+        const newSelected = new Set(selected);
         if (newSelected.has(filename)) newSelected.delete(filename);
         else newSelected.add(filename);
+        setSelected(newSelected);
         setLastSelectedIndex(index);
     } else if (e.shiftKey && lastSelectedIndex !== -1) {
         const start = Math.min(lastSelectedIndex, index);
         const end = Math.max(lastSelectedIndex, index);
-        // Add range, but usually Shift+Click replaces selection from anchor. 
-        // We will clear and add range to mimic standard behavior unless Ctrl is also held (handled above)
-        newSelected = new Set();
+        const newSelected = new Set(selected); // Keep existing? Windows Explorer logic usually replaces unless Ctrl also held. 
+        // Simple logic: Clear and select range.
+        const range = new Set<string>();
         for (let i = start; i <= end; i++) {
-            newSelected.add(files[i].filename);
+            range.add(sortedFiles[i].filename);
         }
+        setSelected(range);
     } else {
-        // Single click -> Select only this one
-        // Note: Right click usually selects but preserves others if already selected. We are using left click.
-        newSelected = new Set([filename]);
+        // Single Click - Select ONLY this one (standard behavior)
+        setSelected(new Set([filename]));
         setLastSelectedIndex(index);
     }
-    setSelected(newSelected);
   };
 
-  // Helper actions
+  const toggleSelect = (filename: string) => {
+      const newSelected = new Set(selected);
+      if (newSelected.has(filename)) newSelected.delete(filename);
+      else newSelected.add(filename);
+      setSelected(newSelected);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, item?: FileEntry) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (item && !selected.has(item.filename)) {
+          setSelected(new Set([item.filename]));
+      }
+      setContextMenu({ x: e.clientX, y: e.clientY, item });
+  };
+
+  // --- File Actions ---
+
   const handleCreateFile = async (name: string) => {
-    if (!name || !name.trim()) return;
+    if (!name.trim()) return;
     try {
         const targetPath = currentPath === '/' ? `/${name.trim()}` : `${currentPath}/${name.trim()}`;
         await window.electron?.sftpWriteFile(subTab.connectionId, targetPath, "");
         refreshFiles(currentPath);
         setShowNewFile(false);
         onOpenFile(targetPath);
-    } catch (e: any) {
-        alert(`Failed to create file: ${e.message}`);
-    }
+    } catch (e: any) { alert(e.message); }
   };
 
   const handleCreateFolder = async (name: string) => {
-    if (!name || !name.trim()) return;
+    if (!name.trim()) return;
     try {
         const targetPath = currentPath === '/' ? `/${name.trim()}` : `${currentPath}/${name.trim()}`;
         await window.electron?.sftpCreateFolder(subTab.connectionId, targetPath);
         refreshFiles(currentPath);
         setShowNewFolder(false);
-    } catch (e: any) {
-        alert(`Failed to create folder: ${e.message}`);
-    }
+    } catch (e: any) { alert(e.message); }
   };
 
-  const getSelectedFiles = () => files.filter(f => selected.has(f.filename));
+  const getSelectedFiles = () => sortedFiles.filter(f => selected.has(f.filename));
+  const getContextFiles = () => contextMenu?.item ? [contextMenu.item] : getSelectedFiles();
 
-  const handleCopy = () => {
-      const selection = getSelectedFiles();
-      if (selection.length === 0) return;
-
-      const items: ClipboardItem[] = selection.map(f => ({
+  const handleCopy = (filesToProcess = getSelectedFiles()) => {
+      if (filesToProcess.length === 0) return;
+      const items: ClipboardItem[] = filesToProcess.map(f => ({
           path: currentPath === '/' ? `/${f.filename}` : `${currentPath}/${f.filename}`,
           filename: f.filename,
           isDirectory: f.isDirectory
       }));
-      
-      setClipboard({
-          op: 'copy',
-          connectionId: subTab.connectionId,
-          items
-      });
+      setClipboard({ op: 'copy', connectionId: subTab.connectionId, items });
   };
 
-  const handleCut = () => {
-      const selection = getSelectedFiles();
-      if (selection.length === 0) return;
-
-      const items: ClipboardItem[] = selection.map(f => ({
+  const handleCut = (filesToProcess = getSelectedFiles()) => {
+      if (filesToProcess.length === 0) return;
+      const items: ClipboardItem[] = filesToProcess.map(f => ({
           path: currentPath === '/' ? `/${f.filename}` : `${currentPath}/${f.filename}`,
           filename: f.filename,
           isDirectory: f.isDirectory
       }));
-
-      setClipboard({
-          op: 'cut',
-          connectionId: subTab.connectionId,
-          items
-      });
+      setClipboard({ op: 'cut', connectionId: subTab.connectionId, items });
   };
 
-  const handleDelete = async () => {
-      const selection = getSelectedFiles();
-      if (selection.length === 0) return;
-      
-      if (!confirm(`Are you sure you want to delete ${selection.length} item(s)?`)) return;
-
+  const handleDelete = async (filesToProcess = getSelectedFiles()) => {
+      if (filesToProcess.length === 0) return;
+      if (!confirm(`Delete ${filesToProcess.length} item(s)?`)) return;
       setIsLoading(true);
       try {
-          for (const file of selection) {
+          for (const file of filesToProcess) {
              const path = currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`;
              await window.electron?.sftpDelete(subTab.connectionId, path, file.isDirectory);
           }
           refreshFiles(currentPath);
-      } catch (e: any) {
-          alert(`Delete failed: ${e.message}`);
-          refreshFiles(currentPath); // Refresh anyway to show partial success
-      } finally {
-          setIsLoading(false);
-      }
+      } catch (e: any) { alert(e.message); refreshFiles(currentPath); } 
+      finally { setIsLoading(false); }
   };
 
-  const handleDownload = async () => {
-      const selection = getSelectedFiles();
-      if (selection.length === 0) return;
+  const handleDeleteItem = async (file: FileEntry) => {
+     if(!confirm(`Delete ${file.filename}?`)) return;
+     try {
+         const path = currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`;
+         await window.electron?.sftpDelete(subTab.connectionId, path, file.isDirectory);
+         refreshFiles(currentPath);
+     } catch(e: any) { alert(e.message); }
+  };
 
-      // Filter out directories for batch download if backend doesn't support recursive
-      // The backend sftp-download-batch currently handles files.
-      // We will warn if folders are selected.
-      const filesOnly = selection.filter(f => !f.isDirectory);
-      if (filesOnly.length === 0 && selection.length > 0) {
-          alert("Folder download is not supported in batch mode yet.");
-          return;
-      }
+  const handleDownload = async (filesToProcess = getSelectedFiles()) => {
+      if (filesToProcess.length === 0) return;
+      const filesOnly = filesToProcess.filter(f => !f.isDirectory);
+      if (filesOnly.length === 0 && filesToProcess.length > 0) { alert("Folder download is not supported in batch mode yet."); return; }
       
       const payload = filesOnly.map(f => ({
           path: currentPath === '/' ? `/${f.filename}` : `${currentPath}/${f.filename}`,
           filename: f.filename,
           isDirectory: false
       }));
-
-      try {
-          await window.electron?.sftpDownloadBatch(subTab.connectionId, payload);
-      } catch (e: any) {
-          if (!e.message?.includes('cancelled')) {
-              alert(`Download failed: ${e.message}`);
-          }
-      }
+      try { await window.electron?.sftpDownloadBatch(subTab.connectionId, payload); } 
+      catch (e: any) { if (!e.message?.includes('cancelled')) alert(e.message); }
   };
 
   const handlePaste = async () => {
-      if (!clipboard || clipboard.items.length === 0) return;
-      if (clipboard.connectionId !== subTab.connectionId) {
-          alert("Cross-connection paste not currently supported. Please use Download/Upload.");
-          return;
-      }
-      
+      if (!clipboard || clipboard.items.length === 0 || clipboard.connectionId !== subTab.connectionId) return;
       setIsPasting(true);
       try {
           for (const item of clipboard.items) {
               const destDir = currentPath === '/' ? '' : currentPath;
               let destPath = `${destDir}/${item.filename}`;
-              
-              // Handle name collision in same dir for copy
               if (item.path === destPath && clipboard.op === 'copy') {
-                 // Append ' copy'
                  const extIndex = item.filename.lastIndexOf('.');
-                 if (extIndex > 0) {
-                     destPath = `${destDir}/${item.filename.substring(0, extIndex)} copy${item.filename.substring(extIndex)}`;
-                 } else {
-                     destPath = `${destDir}/${item.filename} copy`;
-                 }
+                 destPath = extIndex > 0 
+                    ? `${destDir}/${item.filename.substring(0, extIndex)} copy${item.filename.substring(extIndex)}`
+                    : `${destDir}/${item.filename} copy`;
               }
-
               if (clipboard.op === 'cut') {
-                  // Check if same location
                   if (item.path === destPath) continue;
                   await window.electron?.sftpRename(subTab.connectionId, item.path, destPath);
               } else {
-                  // Copy
-                  const escape = (p: string) => p.replace(/(["'$`\\])/g,'\\$1');
-                  const cmd = `cp -r "${escape(item.path)}" "${escape(destPath)}"`;
+                  const cmd = `cp -r "${item.path.replace(/(["'$`\\])/g,'\\$1')}" "${destPath.replace(/(["'$`\\])/g,'\\$1')}"`;
                   const result = await window.electron?.sshExec(subTab.connectionId, cmd);
-                  if (result && result.code !== 0) {
-                      throw new Error(`Copy failed: ${result.stderr}`);
-                  }
+                  if (result && result.code !== 0) throw new Error(result.stderr);
               }
           }
-          
-          if (clipboard.op === 'cut') {
-              setClipboard(null);
-          }
+          if (clipboard.op === 'cut') setClipboard(null);
           await refreshFiles(currentPath);
-      } catch (e: any) {
-          alert(`Paste failed: ${e.message}`);
-      } finally {
-          setIsPasting(false);
+      } catch (e: any) { alert(e.message); } 
+      finally { setIsPasting(false); }
+  };
+
+  // --- Context Menu Options ---
+  const getContextMenuOptions = () => {
+      if (contextMenu?.item) {
+          const file = contextMenu.item;
+          return [
+              ...(file.isDirectory ? [
+                  { label: "Open", icon: <Folder size={14}/>, onClick: () => handleNavigate(file.filename) },
+                  { label: "Open in Terminal", icon: <Terminal size={14}/>, onClick: () => onOpenTerminal(currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`) }
+              ] : [
+                  { label: "Edit", icon: <Edit2 size={14}/>, onClick: () => openEditor(file) }
+              ]),
+              { separator: true, label: "", onClick: () => {} },
+              { label: "Rename", icon: <Edit3 size={14}/>, onClick: () => setShowRename({item: file, name: file.filename}) },
+              { label: "Permissions", icon: <Lock size={14}/>, onClick: () => setShowPermissions(file) },
+              { separator: true, label: "", onClick: () => {} },
+              { label: "Copy", icon: <Copy size={14}/>, onClick: () => handleCopy([file]) },
+              { label: "Cut", icon: <Scissors size={14}/>, onClick: () => handleCut([file]) },
+              { separator: true, label: "", onClick: () => {} },
+              { label: "Download", icon: <Download size={14}/>, onClick: () => handleDownload([file]) },
+              { label: "Delete", icon: <Trash size={14}/>, onClick: () => handleDeleteItem(file), danger: true }
+          ];
       }
+      return [
+          { label: "New File", icon: <FilePlus size={14}/>, onClick: () => setShowNewFile(true) },
+          { label: "New Folder", icon: <FolderPlus size={14}/>, onClick: () => setShowNewFolder(true) },
+          { separator: true, label: "", onClick: () => {} },
+          { label: "Paste", icon: <Clipboard size={14}/>, onClick: handlePaste },
+          { separator: true, label: "", onClick: () => {} },
+          { label: "Select All", icon: <CheckCircle2 size={14}/>, onClick: handleSelectAll },
+          { label: "Refresh", icon: <RefreshCw size={14}/>, onClick: () => refreshFiles(currentPath) }
+      ];
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#020617] relative" onClick={() => setSelected(new Set())}>
+    <div className="flex flex-col h-full bg-[#020617] relative" onClick={() => setSelected(new Set())} onContextMenu={(e) => handleContextMenu(e)}>
        {/* Address Bar */}
        <div className="h-12 border-b border-slate-800 flex items-center px-4 gap-3 bg-slate-950/50 shrink-0" onClick={e => e.stopPropagation()}>
           <div className="flex gap-1">
@@ -831,82 +874,66 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
           <form onSubmit={(e) => { e.preventDefault(); refreshFiles(pathInput); }} className="flex-1">
              <input type="text" value={pathInput} onChange={(e) => setPathInput(e.target.value)} className="w-full bg-slate-900 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 font-mono transition-all" />
           </form>
-          
           <div className="h-6 w-px bg-slate-800 mx-1" />
-          
-          {/* View Toggle */}
           <div className="flex bg-slate-900 rounded-lg border border-slate-800 p-0.5">
              <button onClick={() => setViewMode('list')} className={cn("p-1.5 rounded-md transition-all", viewMode === 'list' ? "bg-slate-700 text-indigo-400 shadow-sm" : "text-slate-500 hover:text-slate-300")} title="List View"><List size={16}/></button>
              <button onClick={() => setViewMode('grid')} className={cn("p-1.5 rounded-md transition-all", viewMode === 'grid' ? "bg-slate-700 text-indigo-400 shadow-sm" : "text-slate-500 hover:text-slate-300")} title="Grid View"><LayoutGrid size={16}/></button>
           </div>
-
           <div className="h-6 w-px bg-slate-800 mx-1" />
-          
           <div className="flex gap-1">
-              <button 
-                onClick={handlePaste} 
-                disabled={!clipboard || isPasting || clipboard.connectionId !== subTab.connectionId}
-                className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-slate-800/50 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50" 
-                title="Paste from clipboard"
-              >
-                 {isPasting ? <Loader2 size={14} className="animate-spin"/> : <Clipboard size={14} />} 
-                 Paste
-              </button>
-              <button onClick={() => setShowNewFile(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FilePlus size={14} /> New File</button>
-              <button onClick={() => setShowNewFolder(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FolderPlus size={14} /> New Folder</button>
+              <button onClick={handlePaste} disabled={!clipboard || isPasting || clipboard.connectionId !== subTab.connectionId} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 disabled:opacity-30 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50" title="Paste"><Clipboard size={14} /> Paste</button>
+              <button onClick={() => setShowNewFile(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FilePlus size={14} /></button>
+              <button onClick={() => setShowNewFolder(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><FolderPlus size={14} /></button>
               <button onClick={async () => { await window.electron?.sftpUpload(subTab.connectionId, currentPath); refreshFiles(currentPath); }} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 hover:text-indigo-300 rounded-lg text-xs font-medium transition-colors border border-indigo-500/20"><Upload size={14} /> Upload</button>
           </div>
        </div>
 
        {/* Bulk Actions Bar */}
        {selected.size > 0 && (
-           <div className="absolute top-14 left-4 right-4 z-20 flex items-center justify-between bg-indigo-900/90 border border-indigo-500/30 backdrop-blur-md text-white px-4 py-2 rounded-lg shadow-xl animate-in slide-in-from-top-2 duration-200" onClick={e => e.stopPropagation()}>
+           <div className="absolute top-14 left-4 right-4 z-20 flex items-center justify-between bg-indigo-900/95 border border-indigo-500/30 backdrop-blur-md text-white px-4 py-2 rounded-lg shadow-xl animate-in slide-in-from-top-2 duration-200" onClick={e => e.stopPropagation()}>
                <div className="flex items-center gap-3">
                    <div className="bg-indigo-500/20 p-1.5 rounded-full"><Check size={14} className="text-indigo-300"/></div>
                    <span className="text-sm font-medium">{selected.size} selected</span>
                </div>
                <div className="flex items-center gap-2">
-                   <button onClick={handleCopy} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Copy"><Copy size={16} /></button>
-                   <button onClick={handleCut} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Cut"><Scissors size={16} /></button>
+                   <button onClick={() => handleCopy()} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Copy"><Copy size={16} /></button>
+                   <button onClick={() => handleCut()} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Cut"><Scissors size={16} /></button>
                    <div className="w-px h-4 bg-white/20 mx-1"></div>
-                   <button onClick={handleDownload} className="flex items-center gap-2 px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs font-medium transition-colors"><Download size={14} /> Download</button>
-                   <button onClick={handleDelete} className="flex items-center gap-2 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded text-xs font-medium transition-colors border border-red-500/20"><Trash size={14} /> Delete</button>
+                   <button onClick={() => handleDownload()} className="flex items-center gap-2 px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs font-medium transition-colors"><Download size={14} /> Download</button>
+                   <button onClick={() => handleDelete()} className="flex items-center gap-2 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded text-xs font-medium transition-colors border border-red-500/20"><Trash size={14} /> Delete</button>
                    <button onClick={() => setSelected(new Set())} className="ml-2 p-1 text-indigo-300 hover:text-white"><X size={16}/></button>
                </div>
            </div>
        )}
        
-       {/* File List / Grid */}
+       {/* File View Area */}
        <div className="flex-1 overflow-auto custom-scrollbar bg-[#020617] p-2" onClick={() => setSelected(new Set())}>
          {viewMode === 'list' ? (
              <table className="w-full text-left text-xs border-separate border-spacing-0">
-               <thead className="bg-slate-900/80 text-slate-500 sticky top-0 z-10 backdrop-blur-sm shadow-sm">
+               <thead className="bg-slate-900/80 text-slate-500 sticky top-0 z-10 backdrop-blur-sm shadow-sm select-none">
                  <tr>
-                   <th className="p-3 pl-4 w-10 border-b border-slate-800 text-center">
-                      <div className="w-4 h-4 border border-slate-700 rounded bg-slate-900" />
+                   <th className="p-3 pl-4 w-10 border-b border-slate-800 text-center"><button onClick={handleSelectAll} className="hover:text-indigo-400"><CheckCircle2 size={16}/></button></th>
+                   <th className="p-3 border-b border-slate-800 cursor-pointer hover:text-slate-300 transition-colors" onClick={() => handleSort('filename')}>
+                       <div className="flex items-center gap-2">Name {sortConfig.key === 'filename' && (sortConfig.direction === 'asc' ? <SortAsc size={12}/> : <SortDesc size={12}/>)}</div>
                    </th>
-                   <th className="p-3 border-b border-slate-800">Name</th>
-                   <th className="p-3 w-24 border-b border-slate-800">Size</th>
+                   <th className="p-3 w-24 border-b border-slate-800 cursor-pointer hover:text-slate-300 transition-colors" onClick={() => handleSort('size')}>
+                       <div className="flex items-center gap-2">Size {sortConfig.key === 'size' && (sortConfig.direction === 'asc' ? <SortAsc size={12}/> : <SortDesc size={12}/>)}</div>
+                   </th>
                    <th className="p-3 w-24 border-b border-slate-800">Perms</th>
                    <th className="p-3 w-32 text-right pr-6 border-b border-slate-800">Actions</th>
                  </tr>
                </thead>
                <tbody className="divide-y divide-slate-800/30">
-                 {files.map((file, i) => {
+                 {sortedFiles.map((file, i) => {
                      const isSelected = selected.has(file.filename);
-                     const fullPath = currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`;
-                     const isCut = clipboard?.op === 'cut' && clipboard.items.some(it => it.path === fullPath);
-                     
+                     const isCut = clipboard?.op === 'cut' && clipboard.items.some(it => it.filename === file.filename); // simplified check
                      return (
                        <tr 
                          key={file.filename} 
                          onClick={(e) => handleSelect(file, i, e)}
+                         onContextMenu={(e) => handleContextMenu(e, file)}
                          onDoubleClick={(e) => { e.stopPropagation(); file.isDirectory ? handleNavigate(file.filename) : openEditor(file) }}
-                         className={cn(
-                             "group transition-colors cursor-pointer select-none", 
-                             isSelected ? "bg-indigo-900/20 hover:bg-indigo-900/30" : "hover:bg-slate-800/40",
-                             isCut && "opacity-50"
-                         )} 
+                         className={cn("group transition-colors cursor-pointer select-none", isSelected ? "bg-indigo-900/20 hover:bg-indigo-900/30" : "hover:bg-slate-800/40", isCut && "opacity-50")} 
                        >
                          <td className="p-3 pl-4 text-center">
                              {isSelected ? <CheckSquare size={16} className="text-indigo-400 mx-auto" /> : (
@@ -918,10 +945,9 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
                          <td className="p-3 text-slate-500 font-mono text-[10px] uppercase">{file.attrs.mode.toString(8).slice(-3)}</td>
                          <td className="p-3 text-right pr-6">
                             <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                               {/* Keep individual actions for quick access even in list mode */}
-                               {!file.isDirectory && <button onClick={(e) => { e.stopPropagation(); openEditor(file); }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Edit"><Edit2 size={14} /></button>}
                                <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Rename"><Edit3 size={14} /></button>
-                               <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1.5 hover:bg-slate-700 hover:text-amber-300 text-slate-500 rounded" title="Permissions"><Lock size={14} /></button>
+                               <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(file) }} className="p-1.5 hover:bg-slate-700 hover:text-red-400 text-slate-500 rounded" title="Delete"><Trash size={14} /></button>
+                               <button onClick={(e) => { e.stopPropagation(); handleContextMenu(e, file); }} className="p-1.5 hover:bg-slate-700 hover:text-white text-slate-500 rounded"><MoreVertical size={14}/></button>
                             </div>
                          </td>
                        </tr>
@@ -930,53 +956,53 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
                </tbody>
              </table>
          ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-2 p-2">
-                 {files.map((file, i) => {
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2 p-2">
+                 {sortedFiles.map((file, i) => {
                      const isSelected = selected.has(file.filename);
-                     const fullPath = currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`;
-                     const isCut = clipboard?.op === 'cut' && clipboard.items.some(it => it.path === fullPath);
-                     
+                     const isCut = clipboard?.op === 'cut' && clipboard.items.some(it => it.filename === file.filename);
                      return (
                          <div 
                              key={file.filename}
                              onClick={(e) => handleSelect(file, i, e)}
+                             onContextMenu={(e) => handleContextMenu(e, file)}
                              onDoubleClick={(e) => { e.stopPropagation(); file.isDirectory ? handleNavigate(file.filename) : openEditor(file) }}
-                             className={cn(
-                                 "flex flex-col items-center p-3 rounded-xl cursor-pointer transition-all border select-none group relative",
-                                 isSelected 
-                                    ? "bg-indigo-600/20 border-indigo-500/50 shadow-lg shadow-indigo-900/20" 
-                                    : "bg-slate-900/30 border-transparent hover:bg-slate-800 hover:border-slate-700",
-                                 isCut && "opacity-50"
-                             )}
+                             className={cn("flex flex-col items-center p-3 rounded-xl cursor-pointer transition-all border select-none group relative h-32 justify-between",
+                                 isSelected ? "bg-indigo-600/20 border-indigo-500/50 shadow-lg shadow-indigo-900/20" : "bg-slate-900/30 border-transparent hover:bg-slate-800 hover:border-slate-700",
+                                 isCut && "opacity-50")}
                          >
-                             <div className="mb-3 relative">
+                             {/* Selection Checkbox Overlay */}
+                             <div className={cn("absolute top-2 left-2 z-10 transition-opacity", isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
+                                <div onClick={(e) => { e.stopPropagation(); toggleSelect(file.filename); }} className={cn("w-5 h-5 rounded border flex items-center justify-center cursor-pointer shadow-sm", isSelected ? "bg-indigo-600 border-indigo-500" : "bg-slate-900/90 border-slate-600 hover:border-slate-400")}>
+                                    {isSelected && <Check size={12} className="text-white" />}
+                                </div>
+                             </div>
+
+                             {/* Action Toolbar Overlay */}
+                             <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                 <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 bg-slate-900/90 hover:bg-indigo-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Rename"><Edit3 size={12}/></button>
+                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(file) }} className="p-1.5 bg-slate-900/90 hover:bg-red-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Delete"><Trash size={12}/></button>
+                                 {!file.isDirectory && <button onClick={(e) => { e.stopPropagation(); openEditor(file) }} className="p-1.5 bg-slate-900/90 hover:bg-emerald-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Edit"><Edit2 size={12}/></button>}
+                                 <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1.5 bg-slate-900/90 hover:bg-amber-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Permissions"><Lock size={12}/></button>
+                             </div>
+
+                             <div className="flex-1 flex items-center justify-center mt-2">
                                  {file.isDirectory ? (
-                                     <Folder size={48} className={cn("fill-current transition-colors", isSelected ? "text-indigo-400" : "text-slate-600 group-hover:text-indigo-400")} />
+                                     <Folder size={40} className={cn("fill-current transition-colors", isSelected ? "text-indigo-400" : "text-slate-600 group-hover:text-indigo-400")} />
                                  ) : (
-                                     <FileText size={48} className={cn("transition-colors", isSelected ? "text-slate-200" : "text-slate-700 group-hover:text-slate-500")} />
-                                 )}
-                                 {isSelected && (
-                                     <div className="absolute -top-1 -right-1 bg-indigo-500 rounded-full p-0.5 border border-slate-900">
-                                         <Check size={10} className="text-white" />
-                                     </div>
+                                     <FileText size={40} className={cn("transition-colors", isSelected ? "text-slate-200" : "text-slate-700 group-hover:text-slate-500")} />
                                  )}
                              </div>
-                             <span className={cn("text-xs text-center w-full break-words line-clamp-2 leading-tight font-medium", isSelected ? "text-indigo-200" : "text-slate-400 group-hover:text-slate-300")}>
+                             <span className={cn("text-xs text-center w-full break-words line-clamp-2 leading-tight font-medium mt-2", isSelected ? "text-indigo-200" : "text-slate-400 group-hover:text-slate-300")}>
                                  {file.filename}
                              </span>
-                             
-                             {/* Context buttons for grid items - only show a few essential ones on hover if single item */}
-                             {!isSelected && (
-                                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1">
-                                      <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1 bg-slate-950/80 hover:bg-indigo-600 text-slate-400 hover:text-white rounded shadow-sm"><Lock size={10}/></button>
-                                 </div>
-                             )}
                          </div>
                      );
                  })}
             </div>
          )}
        </div>
+
+       {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} options={getContextMenuOptions()} onClose={() => setContextMenu(null)} />}
        
        <Modal isOpen={!!showRename} onClose={() => setShowRename(null)} title="Rename File">
           {showRename && (
@@ -992,21 +1018,8 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
        <Modal isOpen={!!showPermissions} onClose={() => setShowPermissions(null)} title="Permissions Manager" maxWidth="max-w-xl">
           {showPermissions && <PermissionsManager item={showPermissions} currentPath={currentPath} connectionId={subTab.connectionId} onClose={() => setShowPermissions(null)} onRefresh={() => refreshFiles(currentPath)} />}
        </Modal>
-       
-       <SimpleInputModal 
-         isOpen={showNewFile} 
-         onClose={() => setShowNewFile(false)} 
-         title="New File" 
-         placeholder="filename.txt" 
-         onSubmit={handleCreateFile} 
-       />
-       <SimpleInputModal 
-         isOpen={showNewFolder} 
-         onClose={() => setShowNewFolder(false)} 
-         title="New Folder" 
-         placeholder="Folder Name" 
-         onSubmit={handleCreateFolder} 
-       />
+       <SimpleInputModal isOpen={showNewFile} onClose={() => setShowNewFile(false)} title="New File" placeholder="filename.txt" onSubmit={handleCreateFile} />
+       <SimpleInputModal isOpen={showNewFolder} onClose={() => setShowNewFolder(false)} title="New Folder" placeholder="Folder Name" onSubmit={handleCreateFolder} />
     </div>
   );
 };
@@ -1014,7 +1027,6 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
 // --- Session View (Server Tab) ---
 
 const SessionView = ({ session, visible, onUpdate, onClose, clipboard, setClipboard }: { session: ServerSession, visible: boolean, onUpdate: (s: ServerSession) => void, onClose: () => void, clipboard: ClipboardState | null, setClipboard: (s: ClipboardState | null) => void }) => {
-  
   const addSubTab = (type: 'terminal' | 'sftp' | 'editor', path?: string) => {
     let title = 'Files';
     if (type === 'terminal') title = path ? 'Terminal' : `Terminal ${session.subTabs.filter(t => t.type === 'terminal').length + 1}`;
@@ -1024,7 +1036,7 @@ const SessionView = ({ session, visible, onUpdate, onClose, clipboard, setClipbo
       id: crypto.randomUUID(),
       type,
       title,
-      connectionId: crypto.randomUUID(), // Each subtab gets its own connection
+      connectionId: crypto.randomUUID(),
       path: path || '/'
     };
     onUpdate({
@@ -1035,7 +1047,6 @@ const SessionView = ({ session, visible, onUpdate, onClose, clipboard, setClipbo
   };
 
   const closeSubTab = (tabId: string) => {
-    // Cleanup backend connection
     const tab = session.subTabs.find(t => t.id === tabId);
     if (tab) window.electron?.sshDisconnect(tab.connectionId);
     
@@ -1056,7 +1067,6 @@ const SessionView = ({ session, visible, onUpdate, onClose, clipboard, setClipbo
 
   return (
     <div className="flex flex-col h-full w-full">
-      {/* Sub-Tab Bar */}
       <div className="h-9 bg-[#0f172a] border-b border-slate-800 flex items-center px-2 shrink-0 select-none">
          <div className="flex items-center gap-1 overflow-x-auto flex-1 scrollbar-none min-w-0">
             {session.subTabs.map(tab => (
@@ -1076,9 +1086,7 @@ const SessionView = ({ session, visible, onUpdate, onClose, clipboard, setClipbo
                   <button onClick={(e) => { e.stopPropagation(); closeSubTab(tab.id); }} className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5"><X size={10} /></button>
                </div>
             ))}
-            
             <div className="h-4 w-px bg-slate-800 mx-1 shrink-0" />
-            
             <button onClick={() => addSubTab('terminal')} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-500 hover:text-indigo-400 hover:bg-slate-800 rounded transition-colors shrink-0" title="New Terminal">
               <Plus size={12} /> Term
             </button>
@@ -1087,8 +1095,6 @@ const SessionView = ({ session, visible, onUpdate, onClose, clipboard, setClipbo
             </button>
          </div>
       </div>
-
-      {/* Content Area - Render ALL tabs but hide inactive ones to preserve state/connections */}
       <div className="flex-1 relative bg-[#020617] overflow-hidden">
          {session.subTabs.map(tab => (
             <div key={tab.id} className={cn("absolute inset-0 w-full h-full", session.activeSubTabId === tab.id ? "z-10" : "z-0 invisible")}>
@@ -1127,13 +1133,11 @@ const SessionView = ({ session, visible, onUpdate, onClose, clipboard, setClipbo
 // --- Main App ---
 
 export default function App() {
-  // Use lazy initialization for state to prevent overwriting localStorage on initial render
   const [serverSessions, setServerSessions] = useState<ServerSession[]>(() => {
     try {
       const saved = localStorage.getItem('ssh-server-sessions');
       return saved ? JSON.parse(saved) : [];
     } catch (e) {
-      console.error("Failed to load sessions", e);
       return [];
     }
   });
@@ -1155,20 +1159,16 @@ export default function App() {
   const [isManagerOpen, setManagerOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<Partial<SSHConnection> | null>(null);
   const [authType, setAuthType] = useState<'password'|'key'>('password');
-  
-  // Global Clipboard State
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
 
-  // Initial Check
   useEffect(() => {
     if (serverSessions.length === 0) {
       setManagerOpen(true);
     } else if (!activeSessionId) {
       setActiveSessionId(serverSessions[serverSessions.length - 1].id);
     }
-  }, []); // Run once on mount
+  }, []);
 
-  // Persistence Effects
   useEffect(() => {
     localStorage.setItem('ssh-server-sessions', JSON.stringify(serverSessions));
   }, [serverSessions]);
@@ -1181,7 +1181,6 @@ export default function App() {
     localStorage.setItem('ssh-connections', JSON.stringify(connections));
   }, [connections]);
 
-
   useEffect(() => {
     if (editingConnection) {
         if (editingConnection.privateKeyPath) setAuthType('key');
@@ -1190,7 +1189,6 @@ export default function App() {
   }, [editingConnection]);
 
   const createServerSession = (conn: SSHConnection) => {
-    // Single Instance Check
     const existing = serverSessions.find(s => s.connection.id === conn.id);
     if (existing) {
       setActiveSessionId(existing.id);
@@ -1198,7 +1196,6 @@ export default function App() {
       return;
     }
 
-    // Default to one terminal
     const initialTab: SubTab = {
        id: crypto.randomUUID(),
        type: 'terminal',
@@ -1223,10 +1220,7 @@ export default function App() {
     if (session && session.subTabs.length > 0) {
        if (!confirm(`Close ${session.connection.name} and all ${session.subTabs.length} active tabs?`)) return;
     }
-    
-    // Disconnect all
     session?.subTabs.forEach(t => window.electron?.sshDisconnect(t.connectionId));
-
     setServerSessions(prev => {
       const newSessions = prev.filter(s => s.id !== id);
       if (activeSessionId === id) {
@@ -1255,14 +1249,6 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30">
-      
-      {/* --- Main Server Tabs (Titlebar) --- */}
-      {/* 
-        CRITICAL FIX: 
-        1. Fixed height h-10 (40px)
-        2. High Z-index (z-[60]) ensures it stays above modals/overlays (which are z-50 or z-40 and top-10)
-        3. Background opaque to cover anything that might scroll behind
-      */}
       <div className={cn("h-10 flex items-end bg-slate-950 border-b border-slate-800 select-none titlebar w-full z-[60] overflow-hidden fixed top-0 left-0 right-0", isMac && "pl-20", isWindows && "pr-36")}>
         <div className="flex items-center h-full px-2 gap-1 overflow-x-auto w-full scrollbar-none">
           {serverSessions.map(session => (
@@ -1284,8 +1270,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* --- Main Content --- */}
-      {/* Content starts at top-10 (40px) to clear the fixed TitleBar */}
       <div className="flex-1 relative overflow-hidden bg-[#020617] mt-10">
         {serverSessions.map(session => (
            <div key={session.id} className={cn("absolute inset-0 w-full h-full", activeSessionId === session.id ? "z-0" : "invisible")}>
@@ -1308,7 +1292,6 @@ export default function App() {
         )}
       </div>
 
-      {/* --- Connection Manager Modal --- */}
       <Modal isOpen={isManagerOpen} onClose={() => { if(serverSessions.length > 0 || editingConnection) { setEditingConnection(null); if(serverSessions.length > 0) setManagerOpen(false); }}} title={editingConnection ? (editingConnection.id ? "Edit Connection" : "New Connection") : "Connection Manager"} hideClose={!editingConnection && serverSessions.length === 0}>
         {!editingConnection ? (
           <div className="space-y-3">
