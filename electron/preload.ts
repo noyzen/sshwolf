@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electron', {
   sshWrite: (connectionId: string, data: string) => ipcRenderer.invoke('ssh-write', { connectionId, data }),
   sshDisconnect: (connectionId: string) => ipcRenderer.invoke('ssh-disconnect', { connectionId }),
   sshResize: (connectionId: string, rows: number, cols: number) => ipcRenderer.invoke('ssh-resize', { connectionId, rows, cols }),
+  sshExec: (connectionId: string, command: string) => ipcRenderer.invoke('ssh-exec', { connectionId, command }),
   onSSHData: (callback: (data: any) => void) => {
     const handler = (_event: any, value: any) => callback(value);
     ipcRenderer.on('ssh-data', handler);

@@ -120,6 +120,26 @@ ipcMain.handle('ssh-resize', (event, { connectionId, rows, cols }) => {
    }
 });
 
+ipcMain.handle('ssh-exec', async (event, { connectionId, command }) => {
+  const conn = sshClients[connectionId];
+  if (!conn) throw new Error('Not connected');
+
+  return new Promise((resolve, reject) => {
+    conn.exec(command, (err, stream) => {
+      if (err) return reject(err);
+      let stdout = '';
+      let stderr = '';
+      stream.on('close', (code: any, signal: any) => {
+        resolve({ code, signal, stdout, stderr });
+      }).on('data', (data: any) => {
+        stdout += data.toString();
+      }).stderr.on('data', (data: any) => {
+        stderr += data.toString();
+      });
+    });
+  });
+});
+
 // --- SFTP IPC Handlers ---
 
 ipcMain.handle('sftp-list', async (event, { connectionId, path: remotePath }) => {

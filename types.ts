@@ -35,6 +35,7 @@ declare global {
       sshWrite: (connectionId: string, data: string) => Promise<void>;
       sshDisconnect: (connectionId: string) => Promise<void>;
       sshResize: (connectionId: string, rows: number, cols: number) => Promise<void>;
+      sshExec: (connectionId: string, command: string) => Promise<{ code: number, stdout: string, stderr: string }>;
       onSSHData: (callback: (data: { connectionId: string, data: string }) => void) => () => void;
       onSSHClosed: (callback: (data: { connectionId: string }) => void) => () => void;
       

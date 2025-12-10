@@ -3,7 +3,8 @@ import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { 
   Terminal, Folder, Settings, Plus, Trash, Upload, Download, 
-  FileText, X, Server, LogOut, ChevronRight, RefreshCw, FolderPlus
+  FileText, X, Server, LogOut, ChevronRight, RefreshCw, FolderPlus,
+  Archive, Expand
 } from 'lucide-react';
 import { SSHConnection, FileEntry } from './types';
 import clsx from 'clsx';
@@ -238,6 +239,53 @@ export default function App() {
     }
   };
 
+  const handleZip = async (file: FileEntry) => {
+    if (!activeConnection) return;
+    const remotePath = currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`;
+    const zipName = `${file.filename}.tar.gz`;
+    
+    // We use tar because it's universally available on Linux.
+    // Command: cd currentPath && tar -czf zipName fileName
+    const cmd = `cd "${currentPath}" && tar -czf "${zipName}" "${file.filename}"`;
+    
+    try {
+      const result = await window.electron?.sshExec(activeConnection.id, cmd);
+      if (result && result.code === 0) {
+        refreshFiles(activeConnection.id, currentPath);
+      } else {
+        alert("Zip failed: " + result?.stderr);
+      }
+    } catch (e) {
+      alert("Error executing zip command");
+    }
+  };
+
+  const handleUnzip = async (file: FileEntry) => {
+    if (!activeConnection) return;
+    
+    // Simple logic for .tar.gz and .zip
+    let cmd = '';
+    if (file.filename.endsWith('.tar.gz') || file.filename.endsWith('.tgz')) {
+      cmd = `cd "${currentPath}" && tar -xzf "${file.filename}"`;
+    } else if (file.filename.endsWith('.zip')) {
+      cmd = `cd "${currentPath}" && unzip "${file.filename}"`;
+    } else {
+      alert("Unsupported archive format. Only .tar.gz and .zip supported.");
+      return;
+    }
+
+    try {
+       const result = await window.electron?.sshExec(activeConnection.id, cmd);
+       if (result && result.code === 0) {
+         refreshFiles(activeConnection.id, currentPath);
+       } else {
+         alert("Unzip failed (Make sure unzip/tar is installed): " + result?.stderr);
+       }
+    } catch (e) {
+      alert("Error executing unzip command");
+    }
+  };
+
   // --- Views ---
 
   if (view === 'connections') {
@@ -280,7 +328,7 @@ export default function App() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {connections.map(conn => (
               <div key={conn.id} className="group bg-slate-900/50 border border-slate-800 rounded-xl p-5 hover:border-indigo-500/50 transition-all no-drag relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                    <button 
                     onClick={(e) => {
                       e.stopPropagation();
@@ -475,7 +523,7 @@ export default function App() {
                    <th className="p-3">Name</th>
                    <th className="p-3 w-32">Size</th>
                    <th className="p-3 w-32">Rights</th>
-                   <th className="p-3 w-20 text-right pr-4">Actions</th>
+                   <th className="p-3 w-40 text-right pr-4">Actions</th>
                  </tr>
                </thead>
                <tbody className="divide-y divide-slate-800/50">
@@ -499,6 +547,15 @@ export default function App() {
                      </td>
                      <td className="p-3 text-right pr-4">
                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                           {/* Context Actions */}
+                           {(file.filename.endsWith('.tar.gz') || file.filename.endsWith('.zip')) && (
+                             <button onClick={(e) => { e.stopPropagation(); handleUnzip(file); }} className="p-1 hover:text-indigo-400" title="Unzip"><Expand size={16} /></button>
+                           )}
+                           
+                           {!file.filename.endsWith('.tar.gz') && !file.filename.endsWith('.zip') && (
+                             <button onClick={(e) => { e.stopPropagation(); handleZip(file); }} className="p-1 hover:text-indigo-400" title="Zip"><Archive size={16} /></button>
+                           )}
+
                           {!file.isDirectory && (
                              <>
                                 <button onClick={(e) => { e.stopPropagation(); handleEditFile(file.filename); }} className="p-1 hover:text-indigo-400" title="Edit"><FileText size={16} /></button>
