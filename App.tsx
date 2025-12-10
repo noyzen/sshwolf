@@ -9,7 +9,8 @@ import {
   Minus, AlignLeft, AlertTriangle, Search, History, Play, Star,
   Loader2, Copy, Scissors, Clipboard, LayoutGrid, List, Check,
   MoreVertical, SortAsc, SortDesc, MousePointer2, ChevronRight,
-  File as FileIcon, CheckCircle2, Package, PackageOpen
+  File as FileIcon, CheckCircle2, Package, PackageOpen, TerminalSquare,
+  Cpu, HardDrive, DownloadCloud
 } from 'lucide-react';
 import { SSHConnection, FileEntry, ServerSession, SubTab, QuickCommand, ClipboardState, ClipboardItem } from './types';
 import clsx from 'clsx';
@@ -158,6 +159,141 @@ const PermissionsManager = ({ item, currentPath, connectionId, onClose, onRefres
   );
 };
 
+const SmartDependencyInstaller = ({ 
+  isOpen, 
+  onClose, 
+  connectionId, 
+  tool, 
+  onSuccess 
+}: { 
+  isOpen: boolean, 
+  onClose: () => void, 
+  connectionId: string, 
+  tool: 'zip' | 'unzip', 
+  onSuccess: () => void 
+}) => {
+  const [status, setStatus] = useState<'prompt' | 'installing' | 'success' | 'error'>('prompt');
+  const [logs, setLogs] = useState<string[]>([]);
+
+  const addLog = (msg: string) => setLogs(prev => [...prev, `> ${msg}`]);
+
+  const install = async () => {
+    setStatus('installing');
+    setLogs([]);
+    addLog(`Detecting package manager...`);
+    
+    try {
+      // 1. Detect OS/Package Manager
+      const checkCmd = `
+        if command -v apt-get &> /dev/null; then echo "apt";
+        elif command -v yum &> /dev/null; then echo "yum";
+        elif command -v apk &> /dev/null; then echo "apk";
+        else echo "unknown"; fi
+      `;
+      const res = await window.electron?.sshExec(connectionId, checkCmd);
+      const pm = res?.stdout.trim();
+      
+      if (!pm || pm === 'unknown') {
+        throw new Error("Could not detect a supported package manager (apt, yum, apk).");
+      }
+      
+      addLog(`Detected package manager: ${pm}`);
+      addLog(`Installing ${tool}...`);
+
+      // 2. Install
+      let installCmd = '';
+      if (pm === 'apt') installCmd = `export DEBIAN_FRONTEND=noninteractive && sudo apt-get update && sudo apt-get install -y ${tool}`;
+      if (pm === 'yum') installCmd = `sudo yum install -y ${tool}`;
+      if (pm === 'apk') installCmd = `sudo apk add ${tool}`;
+
+      // Stream fake progress for UX
+      addLog(`Running: ${installCmd}`);
+      
+      const installRes = await window.electron?.sshExec(connectionId, installCmd);
+      
+      if (installRes?.code === 0) {
+         addLog(`Successfully installed ${tool}!`);
+         setStatus('success');
+      } else {
+         addLog(`Exit Code: ${installRes?.code}`);
+         addLog(`Error: ${installRes?.stderr}`);
+         throw new Error("Installation command failed.");
+      }
+
+    } catch (e: any) {
+      addLog(`ERROR: ${e.message}`);
+      setStatus('error');
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      setStatus('prompt');
+      setLogs([]);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`Install ${tool}`} hideClose={status === 'installing'}>
+      <div className="space-y-4">
+        {status === 'prompt' && (
+          <>
+            <div className="flex items-center gap-4 bg-amber-500/10 border border-amber-500/20 p-4 rounded-lg">
+               <div className="bg-amber-500/20 p-2 rounded-lg text-amber-500">
+                  <PackageOpen size={24} />
+               </div>
+               <div>
+                  <h4 className="font-semibold text-amber-200">Missing Dependency</h4>
+                  <p className="text-sm text-slate-400 mt-1">
+                    The command <code>{tool}</code> is required for this operation but is not found on the server.
+                    Would you like to attempt to install it automatically?
+                  </p>
+               </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-4">
+              <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+              <button onClick={install} className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium shadow-lg shadow-indigo-500/20">
+                <DownloadCloud size={16} /> Install {tool}
+              </button>
+            </div>
+          </>
+        )}
+
+        {(status === 'installing' || status === 'success' || status === 'error') && (
+           <div className="space-y-4">
+              <div className="bg-slate-950 rounded-lg border border-slate-800 p-4 font-mono text-xs h-64 overflow-y-auto custom-scrollbar shadow-inner">
+                 {logs.map((log, i) => (
+                   <div key={i} className={cn("mb-1", log.startsWith('ERROR') ? "text-red-400" : log.startsWith('Successfully') ? "text-emerald-400" : "text-slate-400")}>
+                     {log}
+                   </div>
+                 ))}
+                 {status === 'installing' && (
+                   <div className="animate-pulse text-indigo-400 mt-2">_</div>
+                 )}
+              </div>
+              
+              <div className="flex justify-end gap-3">
+                 {status === 'installing' && <div className="flex items-center gap-2 text-slate-400 text-sm"><Loader2 className="animate-spin" size={14}/> Installing...</div>}
+                 
+                 {status === 'success' && (
+                   <button onClick={onSuccess} className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium shadow-lg shadow-emerald-500/20">
+                     <CheckCircle2 size={16} /> Continue
+                   </button>
+                 )}
+                 
+                 {status === 'error' && (
+                   <button onClick={onClose} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg">Close</button>
+                 )}
+              </div>
+           </div>
+        )}
+      </div>
+    </Modal>
+  );
+};
+
 // --- Context Menu Component ---
 
 interface ContextMenuOption {
@@ -282,33 +418,45 @@ const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab, conne
      setCursorPos({ line, col });
   };
 
+  // Theme matching colors
+  const theme = {
+      bg: "bg-slate-950",
+      toolbar: "bg-slate-900 border-b border-slate-800",
+      text: "text-slate-300",
+      gutter: "bg-slate-900 text-slate-500",
+      statusbar: "bg-indigo-600 text-white"
+  };
+
   return (
-    <div className="flex flex-col h-full bg-[#1e1e1e] font-sans">
-       <div className="h-12 bg-[#252526] border-b border-[#3e3e42] flex items-center justify-between px-4 shadow-sm shrink-0">
+    <div className={cn("flex flex-col h-full font-sans", theme.bg)}>
+       {/* Toolbar */}
+       <div className={cn("h-12 flex items-center justify-between px-4 shadow-sm shrink-0", theme.toolbar)}>
           <div className="flex items-center gap-4 overflow-hidden">
              <div className="flex items-center gap-2 text-slate-300">
-                <FileText className="text-[#4fc1ff]" size={18} />
-                <span className="font-mono text-xs truncate max-w-[300px] text-slate-300">{subTab.path}</span>
+                <FileText className="text-indigo-400" size={18} />
+                <span className="font-mono text-xs truncate max-w-[300px] text-slate-200">{subTab.path}</span>
              </div>
-             <div className="h-4 w-px bg-[#3e3e42]" />
+             <div className="h-4 w-px bg-slate-700" />
              <div className="flex items-center gap-1">
-                 <button onClick={() => setFontSize(s => Math.max(10, s-1))} className="p-1.5 hover:bg-[#3e3e42] rounded text-slate-400"><Minus size={14} /></button>
+                 <button onClick={() => setFontSize(s => Math.max(10, s-1))} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white"><Minus size={14} /></button>
                  <span className="text-xs text-slate-500 w-6 text-center">{fontSize}</span>
-                 <button onClick={() => setFontSize(s => Math.min(24, s+1))} className="p-1.5 hover:bg-[#3e3e42] rounded text-slate-400"><Plus size={14} /></button>
-                 <div className="h-4 w-px bg-[#3e3e42] mx-1" />
-                 <button onClick={() => setWordWrap(!wordWrap)} className={cn("p-1.5 rounded transition-colors", wordWrap ? "bg-[#3e3e42] text-white" : "text-slate-400 hover:bg-[#3e3e42]")}><WrapText size={14} /></button>
+                 <button onClick={() => setFontSize(s => Math.min(24, s+1))} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white"><Plus size={14} /></button>
+                 <div className="h-4 w-px bg-slate-700 mx-1" />
+                 <button onClick={() => setWordWrap(!wordWrap)} className={cn("p-1.5 rounded transition-colors", wordWrap ? "bg-indigo-600/20 text-indigo-400" : "text-slate-400 hover:bg-slate-800 hover:text-white")} title="Toggle Word Wrap"><WrapText size={14} /></button>
              </div>
           </div>
           <div className="flex gap-2">
-             <button onClick={loadFile} className="p-2 text-slate-400 hover:text-white hover:bg-[#3e3e42] rounded transition-colors" title="Reload">
+             <button onClick={loadFile} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors" title="Reload">
                  <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
              </button>
-             <button disabled={saving || loading} onClick={handleSave} className="flex items-center gap-2 px-4 py-1.5 text-xs bg-[#007acc] hover:bg-[#0062a3] text-white rounded transition-all disabled:opacity-50 font-medium">
+             <button disabled={saving || loading} onClick={handleSave} className="flex items-center gap-2 px-4 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-all disabled:opacity-50 font-medium shadow-lg shadow-indigo-500/20">
                {saving ? <Loader2 className="animate-spin" size={12} /> : <Save size={12} />} Save
              </button>
           </div>
        </div>
-       <div className="flex-1 relative bg-[#1e1e1e]">
+       
+       {/* Editor Area */}
+       <div className="flex-1 relative">
          {loading && !content ? (
              <div className="absolute inset-0 flex items-center justify-center text-slate-500 gap-2">
                  <Loader2 className="animate-spin" /> Loading...
@@ -316,7 +464,11 @@ const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab, conne
          ) : (
             <textarea 
             ref={textAreaRef}
-            className={cn("absolute inset-0 w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono p-4 outline-none resize-none leading-relaxed custom-scrollbar border-none", wordWrap ? "whitespace-pre-wrap" : "whitespace-pre")}
+            className={cn(
+                "absolute inset-0 w-full h-full font-mono p-4 outline-none resize-none leading-relaxed custom-scrollbar border-none", 
+                theme.bg, theme.text,
+                wordWrap ? "whitespace-pre-wrap" : "whitespace-pre"
+            )}
             style={{ fontSize: `${fontSize}px` }}
             value={content}
             onChange={e => { setContent(e.target.value); updateCursor(e); }}
@@ -324,7 +476,9 @@ const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab, conne
             />
          )}
        </div>
-       <div className="h-6 bg-[#007acc] text-white text-[11px] flex items-center px-4 justify-between select-none">
+       
+       {/* Status Bar */}
+       <div className={cn("h-6 text-[11px] flex items-center px-4 justify-between select-none", theme.statusbar)}>
            <div className="flex gap-4">
                <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
                <span>UTF-8</span>
@@ -487,40 +641,6 @@ interface SFTPPaneProps {
   setClipboard: (state: ClipboardState | null) => void;
 }
 
-const installZipOnServer = async (connectionId: string) => {
-    const check = await window.electron?.sshExec(connectionId, 'which zip');
-    if (check && check.stdout.trim().length > 0) return true;
-
-    if (!confirm("Zip is not installed on the server. Attempt to install it automatically?")) return false;
-
-    // Try common package managers
-    const installCmd = `
-    if command -v apt-get &> /dev/null; then
-        sudo apt-get update && sudo apt-get install -y zip
-    elif command -v yum &> /dev/null; then
-        sudo yum install -y zip
-    elif command -v apk &> /dev/null; then
-        sudo apk add zip
-    else
-        echo "No supported package manager found"
-        exit 1
-    fi
-    `;
-    
-    try {
-        const res = await window.electron?.sshExec(connectionId, installCmd);
-        if (res.code === 0) {
-            alert("Zip installed successfully.");
-            return true;
-        } else {
-            throw new Error(res.stderr || "Installation failed");
-        }
-    } catch (e: any) {
-        alert(`Failed to install zip: ${e.message}\nTry installing 'zip' manually via terminal.`);
-        return false;
-    }
-}
-
 const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, onOpenFile, clipboard, setClipboard }: SFTPPaneProps) => {
   const [currentPath, setCurrentPath] = useState(subTab.path || '/');
   const [pathInput, setPathInput] = useState(currentPath);
@@ -544,6 +664,9 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
   const [showArchive, setShowArchive] = useState<string | null>(null);
   const [isPasting, setIsPasting] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, item?: FileEntry } | null>(null);
+  
+  // Smart Installer State
+  const [installerState, setInstallerState] = useState<{ isOpen: boolean, tool: 'zip'|'unzip', resolve?: (v: boolean) => void } | null>(null);
 
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -687,6 +810,25 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
       setContextMenu({ x: e.clientX, y: e.clientY, item });
   };
 
+  // --- Dependency Check Logic ---
+
+  const ensureDependency = async (tool: 'zip' | 'unzip'): Promise<boolean> => {
+      const check = await window.electron?.sshExec(subTab.connectionId, `which ${tool}`);
+      if (check && check.stdout.trim().length > 0) return true;
+
+      // Ask user via UI
+      return new Promise((resolve) => {
+          setInstallerState({ 
+             isOpen: true, 
+             tool, 
+             resolve: (result) => {
+                 setInstallerState(null);
+                 resolve(result);
+             }
+          });
+      });
+  };
+
   // --- File Actions ---
 
   const handleCreateFile = async (name: string) => {
@@ -799,7 +941,9 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
 
   const handleArchive = async (name: string) => {
     if (!name || getSelectedFiles().length === 0) return;
-    if (!(await installZipOnServer(subTab.connectionId))) return;
+    
+    // Smart dependency check
+    if (!(await ensureDependency('zip'))) return;
 
     setIsLoading(true);
     const filename = name.endsWith('.zip') ? name : name + '.zip';
@@ -819,7 +963,7 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
      try {
         let cmd = '';
         if (file.filename.endsWith('.zip')) {
-            if (!(await installZipOnServer(subTab.connectionId))) { setIsLoading(false); return; }
+            if (!(await ensureDependency('unzip'))) { setIsLoading(false); return; }
             cmd = `cd "${currentPath}" && unzip "${file.filename}"`;
         } else if (file.filename.endsWith('.tar.gz') || file.filename.endsWith('.tgz')) {
             cmd = `cd "${currentPath}" && tar -xzf "${file.filename}"`;
@@ -1032,6 +1176,18 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
        <Modal isOpen={!!showPermissions} onClose={() => setShowPermissions(null)} title="Permissions Manager" maxWidth="max-w-xl">
           {showPermissions && <PermissionsManager item={showPermissions} currentPath={currentPath} connectionId={subTab.connectionId} onClose={() => setShowPermissions(null)} onRefresh={() => refreshFiles(currentPath)} />}
        </Modal>
+       
+       {/* Smart Installer Modal */}
+       {installerState && (
+          <SmartDependencyInstaller 
+             isOpen={installerState.isOpen} 
+             onClose={() => installerState.resolve && installerState.resolve(false)}
+             connectionId={subTab.connectionId}
+             tool={installerState.tool}
+             onSuccess={() => installerState.resolve && installerState.resolve(true)}
+          />
+       )}
+
        <SimpleInputModal isOpen={showNewFile} onClose={() => setShowNewFile(false)} title="New File" placeholder="filename.txt" onSubmit={handleCreateFile} />
        <SimpleInputModal isOpen={showNewFolder} onClose={() => setShowNewFolder(false)} title="New Folder" placeholder="Folder Name" onSubmit={handleCreateFolder} />
        <SimpleInputModal isOpen={!!showArchive} onClose={() => setShowArchive(null)} title="Create Archive" placeholder="archive.zip" onSubmit={handleArchive} buttonLabel="Compress" initialValue={showArchive || ""} />
