@@ -31,14 +31,14 @@ export interface QuickCommand {
   command: string;
 }
 
-export type SubTabType = 'terminal' | 'sftp';
+export type SubTabType = 'terminal' | 'sftp' | 'editor';
 
 export interface SubTab {
   id: string;
   type: SubTabType;
   title: string;
   connectionId: string; // Unique ID used for the backend connection
-  path?: string; // For SFTP to remember location
+  path?: string; // For SFTP to remember location, or Editor to remember file path
 }
 
 export interface ServerSession {

@@ -1,5 +1,5 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { 
@@ -7,7 +7,8 @@ import {
   FileText, X, Server, LogOut, RefreshCw, FolderPlus, FilePlus,
   Archive, Expand, Edit2, Monitor, ArrowUp, Lock, Edit3,
   Zap, Save, CheckSquare, Square, Key, Shield, Type, WrapText,
-  Minus, AlignLeft, AlertTriangle, Search, History, Play, Star
+  Minus, AlignLeft, AlertTriangle, Search, History, Play, Star,
+  Loader2
 } from 'lucide-react';
 import { SSHConnection, FileEntry, ServerSession, SubTab, QuickCommand } from './types';
 import clsx from 'clsx';
@@ -25,8 +26,9 @@ const isWindows = navigator.userAgent.includes('Windows');
 
 const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-lg", hideClose = false }: { isOpen: boolean; onClose: () => void; title: string; children?: React.ReactNode, maxWidth?: string, hideClose?: boolean }) => {
   if (!isOpen) return null;
+  // Modal sits BELOW the titlebar (top-10) to respect the separate window controls area
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+    <div className="fixed left-0 right-0 bottom-0 top-10 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className={cn("bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full overflow-hidden flex flex-col max-h-[90vh]", maxWidth)}>
         <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-950/50 shrink-0">
           <h3 className="text-lg font-semibold text-slate-200">{title}</h3>
@@ -156,19 +158,54 @@ const PermissionsManager = ({ item, currentPath, connectionId, onClose, onRefres
   );
 };
 
-const FileEditor = ({ file, connectionId, onClose, onRefresh }: { file: {path: string, content: string}, connectionId: string, onClose: () => void, onRefresh: () => void }) => {
-  const [content, setContent] = useState(file.content);
+// --- File Editor Pane (Now a SubTab) ---
+
+const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab, connection: SSHConnection, visible: boolean }) => {
+  const [content, setContent] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fontSize, setFontSize] = useState(14);
   const [wordWrap, setWordWrap] = useState(false);
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const [isConnected, setIsConnected] = useState(false);
+
+  // Load content when visible and not loaded
+  useEffect(() => {
+    if (visible && !loaded && !loading && !isConnected) {
+      loadFile();
+    }
+  }, [visible, loaded, loading, isConnected]);
+
+  const loadFile = async () => {
+    setLoading(true);
+    try {
+        if (!isConnected) {
+           await window.electron?.sshConnect({ ...connection, id: subTab.connectionId });
+           setIsConnected(true);
+        }
+        if (subTab.path) {
+          const data = await window.electron?.sftpReadFile(subTab.connectionId, subTab.path);
+          setContent(data);
+          setLoaded(true);
+        }
+    } catch (e: any) {
+        setContent(`Error loading file: ${e.message}`);
+    } finally {
+        setLoading(false);
+    }
+  };
 
   const handleSave = async () => {
+    if (!subTab.path) return;
     setSaving(true);
     try {
-      await window.electron?.sftpWriteFile(connectionId, file.path, content);
-      onRefresh();
+      if (!isConnected) {
+          await window.electron?.sshConnect({ ...connection, id: subTab.connectionId });
+          setIsConnected(true);
+      }
+      await window.electron?.sftpWriteFile(subTab.connectionId, subTab.path, content);
     } catch (e: any) {
       alert(`Save Failed: ${e.message}`);
     } finally {
@@ -199,13 +236,14 @@ const FileEditor = ({ file, connectionId, onClose, onRefresh }: { file: {path: s
      setCursorPos({ line, col });
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-[100] bg-[#1e1e1e] flex flex-col animate-in fade-in duration-200 font-sans">
+  return (
+    <div className="flex flex-col h-full bg-[#1e1e1e] font-sans">
+       {/* Editor Toolbar */}
        <div className="h-12 bg-[#252526] border-b border-[#3e3e42] flex items-center justify-between px-4 shadow-sm shrink-0">
           <div className="flex items-center gap-4 overflow-hidden">
              <div className="flex items-center gap-2 text-slate-300">
                 <FileText className="text-[#4fc1ff]" size={18} />
-                <span className="font-mono text-xs truncate max-w-[300px]">{file.path}</span>
+                <span className="font-mono text-xs truncate max-w-[300px] text-slate-300">{subTab.path}</span>
              </div>
              <div className="h-4 w-px bg-[#3e3e42]" />
              <div className="flex items-center gap-1">
@@ -217,26 +255,44 @@ const FileEditor = ({ file, connectionId, onClose, onRefresh }: { file: {path: s
              </div>
           </div>
           <div className="flex gap-2">
-             <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-300 hover:bg-[#3e3e42] rounded transition-colors">Close</button>
-             <button disabled={saving} onClick={handleSave} className="flex items-center gap-2 px-4 py-1.5 text-xs bg-[#007acc] hover:bg-[#0062a3] text-white rounded transition-all disabled:opacity-50">
-               {saving ? <RefreshCw className="animate-spin" size={12} /> : <Save size={12} />} Save
+             <button onClick={loadFile} className="p-2 text-slate-400 hover:text-white hover:bg-[#3e3e42] rounded transition-colors" title="Reload">
+                 <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+             </button>
+             <button disabled={saving || loading} onClick={handleSave} className="flex items-center gap-2 px-4 py-1.5 text-xs bg-[#007acc] hover:bg-[#0062a3] text-white rounded transition-all disabled:opacity-50 font-medium">
+               {saving ? <Loader2 className="animate-spin" size={12} /> : <Save size={12} />} Save
              </button>
           </div>
        </div>
+       
+       {/* Editor Body */}
        <div className="flex-1 relative bg-[#1e1e1e]">
-         <textarea 
-           ref={textAreaRef}
-           className={cn("absolute inset-0 w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono p-4 outline-none resize-none leading-relaxed custom-scrollbar border-none", wordWrap ? "whitespace-pre-wrap" : "whitespace-pre")}
-           style={{ fontSize: `${fontSize}px` }}
-           value={content}
-           onChange={e => { setContent(e.target.value); updateCursor(e); }}
-           onClick={updateCursor} onKeyUp={updateCursor} onKeyDown={handleKeyDown} spellCheck={false}
-         />
+         {loading && !content ? (
+             <div className="absolute inset-0 flex items-center justify-center text-slate-500 gap-2">
+                 <Loader2 className="animate-spin" /> Loading...
+             </div>
+         ) : (
+            <textarea 
+            ref={textAreaRef}
+            className={cn("absolute inset-0 w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono p-4 outline-none resize-none leading-relaxed custom-scrollbar border-none", wordWrap ? "whitespace-pre-wrap" : "whitespace-pre")}
+            style={{ fontSize: `${fontSize}px` }}
+            value={content}
+            onChange={e => { setContent(e.target.value); updateCursor(e); }}
+            onClick={updateCursor} onKeyUp={updateCursor} onKeyDown={handleKeyDown} spellCheck={false}
+            />
+         )}
        </div>
+       
+       {/* Status Bar */}
        <div className="h-6 bg-[#007acc] text-white text-[11px] flex items-center px-4 justify-between select-none">
-           <div className="flex gap-4"><span>Ln {cursorPos.line}, Col {cursorPos.col}</span><span>UTF-8</span></div>
+           <div className="flex gap-4">
+               <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
+               <span>UTF-8</span>
+           </div>
+           <div>
+               {isConnected ? "Connected" : "Disconnected"}
+           </div>
        </div>
-    </div>, document.body
+    </div>
   );
 };
 
@@ -470,7 +526,7 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
 
 // --- SFTP Pane ---
 
-const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }: { subTab: SubTab, connection: SSHConnection, visible: boolean, onPathChange: (path: string) => void, onOpenTerminal: (path: string) => void }) => {
+const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, onOpenFile }: { subTab: SubTab, connection: SSHConnection, visible: boolean, onPathChange: (path: string) => void, onOpenTerminal: (path: string) => void, onOpenFile: (path: string) => void }) => {
   const [currentPath, setCurrentPath] = useState(subTab.path || '/');
   const [pathInput, setPathInput] = useState(currentPath);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -478,7 +534,6 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }:
   const [isConnected, setIsConnected] = useState(false);
   
   // Modals
-  const [editingFile, setEditingFile] = useState<{path: string, content: string} | null>(null);
   const [showRename, setShowRename] = useState<{item: FileEntry, name: string} | null>(null);
   const [showPermissions, setShowPermissions] = useState<FileEntry | null>(null);
   const [showNewFile, setShowNewFile] = useState(false);
@@ -538,11 +593,8 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }:
     refreshFiles(newPath);
   };
 
-  const openEditor = async (file: FileEntry) => {
-    try {
-      const content = await window.electron?.sftpReadFile(subTab.connectionId, `${currentPath}/${file.filename}`);
-      setEditingFile({ path: `${currentPath}/${file.filename}`, content });
-    } catch (e: any) { alert(`Error: ${e.message}`); }
+  const openEditor = (file: FileEntry) => {
+    onOpenFile(`${currentPath}/${file.filename}`);
   };
 
   // Helper actions
@@ -553,6 +605,7 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }:
         await window.electron?.sftpWriteFile(subTab.connectionId, targetPath, "");
         refreshFiles(currentPath);
         setShowNewFile(false);
+        onOpenFile(targetPath); // Auto open new file
     } catch (e: any) {
         alert(`Failed to create file: ${e.message}`);
     }
@@ -625,7 +678,6 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }:
          </table>
        </div>
        
-       {editingFile && <FileEditor file={editingFile} connectionId={subTab.connectionId} onClose={() => setEditingFile(null)} onRefresh={() => refreshFiles(currentPath)} />}
        <Modal isOpen={!!showRename} onClose={() => setShowRename(null)} title="Rename File">
           {showRename && (
              <form onSubmit={(e) => { e.preventDefault(); window.electron?.sftpRename(subTab.connectionId, `${currentPath}/${showRename.item.filename}`, `${currentPath}/${showRename.name}`).then(() => { setShowRename(null); refreshFiles(currentPath); }); }} className="space-y-4">
@@ -663,11 +715,15 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }:
 
 const SessionView = ({ session, visible, onUpdate, onClose }: { session: ServerSession, visible: boolean, onUpdate: (s: ServerSession) => void, onClose: () => void }) => {
   
-  const addSubTab = (type: 'terminal' | 'sftp', path?: string) => {
+  const addSubTab = (type: 'terminal' | 'sftp' | 'editor', path?: string) => {
+    let title = 'Files';
+    if (type === 'terminal') title = path ? 'Terminal' : `Terminal ${session.subTabs.filter(t => t.type === 'terminal').length + 1}`;
+    if (type === 'editor') title = path?.split('/').pop() || 'Untitled';
+
     const newTab: SubTab = {
       id: crypto.randomUUID(),
       type,
-      title: type === 'terminal' ? (path ? 'Terminal' : `Terminal ${session.subTabs.filter(t => t.type === 'terminal').length + 1}`) : 'Files',
+      title,
       connectionId: crypto.randomUUID(), // Each subtab gets its own connection
       path: path || '/'
     };
@@ -702,30 +758,31 @@ const SessionView = ({ session, visible, onUpdate, onClose }: { session: ServerS
     <div className="flex flex-col h-full w-full">
       {/* Sub-Tab Bar */}
       <div className="h-9 bg-[#0f172a] border-b border-slate-800 flex items-center px-2 shrink-0 select-none">
-         <div className="flex items-center gap-1 overflow-x-auto flex-1 scrollbar-none">
+         <div className="flex items-center gap-1 overflow-x-auto flex-1 scrollbar-none min-w-0">
             {session.subTabs.map(tab => (
                <div 
                  key={tab.id}
                  onClick={() => onUpdate({ ...session, activeSubTabId: tab.id })}
                  className={cn(
-                   "group flex items-center gap-2 px-3 py-1 text-xs font-medium rounded-md cursor-pointer border transition-all min-w-[100px] max-w-[200px]",
+                   "group flex items-center gap-2 px-3 py-1 text-xs font-medium rounded-md cursor-pointer border transition-all min-w-[120px] max-w-[200px] shrink-0",
                    session.activeSubTabId === tab.id 
                      ? "bg-slate-800 text-indigo-400 border-slate-700 shadow-sm" 
                      : "text-slate-500 border-transparent hover:bg-slate-800/50 hover:text-slate-300"
                  )}
+                 title={tab.path}
                >
-                  {tab.type === 'terminal' ? <Terminal size={12} /> : <Folder size={12} />}
+                  {tab.type === 'terminal' ? <Terminal size={12} /> : tab.type === 'editor' ? <FileText size={12} className="text-emerald-500" /> : <Folder size={12} />}
                   <span className="truncate flex-1">{tab.title}</span>
                   <button onClick={(e) => { e.stopPropagation(); closeSubTab(tab.id); }} className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5"><X size={10} /></button>
                </div>
             ))}
             
-            <div className="h-4 w-px bg-slate-800 mx-1" />
+            <div className="h-4 w-px bg-slate-800 mx-1 shrink-0" />
             
-            <button onClick={() => addSubTab('terminal')} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-500 hover:text-indigo-400 hover:bg-slate-800 rounded transition-colors" title="New Terminal">
+            <button onClick={() => addSubTab('terminal')} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-500 hover:text-indigo-400 hover:bg-slate-800 rounded transition-colors shrink-0" title="New Terminal">
               <Plus size={12} /> Term
             </button>
-            <button onClick={() => addSubTab('sftp')} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-500 hover:text-indigo-400 hover:bg-slate-800 rounded transition-colors" title="New File Manager">
+            <button onClick={() => addSubTab('sftp')} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-500 hover:text-indigo-400 hover:bg-slate-800 rounded transition-colors shrink-0" title="New File Manager">
               <Plus size={12} /> SFTP
             </button>
          </div>
@@ -737,6 +794,8 @@ const SessionView = ({ session, visible, onUpdate, onClose }: { session: ServerS
             <div key={tab.id} className={cn("absolute inset-0 w-full h-full", session.activeSubTabId === tab.id ? "z-10" : "z-0 invisible")}>
                 {tab.type === 'terminal' ? (
                    <TerminalPane subTab={tab} connection={session.connection} visible={session.activeSubTabId === tab.id} />
+                ) : tab.type === 'editor' ? (
+                   <FileEditorPane subTab={tab} connection={session.connection} visible={session.activeSubTabId === tab.id} />
                 ) : (
                    <SFTPPane 
                      subTab={tab} 
@@ -744,6 +803,7 @@ const SessionView = ({ session, visible, onUpdate, onClose }: { session: ServerS
                      visible={session.activeSubTabId === tab.id} 
                      onPathChange={(path) => updateSubTab(tab.id, { path, title: path })}
                      onOpenTerminal={(path) => addSubTab('terminal', path)}
+                     onOpenFile={(path) => addSubTab('editor', path)}
                    />
                 )}
             </div>
@@ -892,7 +952,13 @@ export default function App() {
     <div className="flex flex-col h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30">
       
       {/* --- Main Server Tabs (Titlebar) --- */}
-      <div className={cn("h-10 flex items-end bg-slate-950 border-b border-slate-800 select-none titlebar w-full z-50 overflow-hidden", isMac && "pl-20", isWindows && "pr-36")}>
+      {/* 
+        CRITICAL FIX: 
+        1. Fixed height h-10 (40px)
+        2. High Z-index (z-[60]) ensures it stays above modals/overlays (which are z-50 or z-40 and top-10)
+        3. Background opaque to cover anything that might scroll behind
+      */}
+      <div className={cn("h-10 flex items-end bg-slate-950 border-b border-slate-800 select-none titlebar w-full z-[60] overflow-hidden fixed top-0 left-0 right-0", isMac && "pl-20", isWindows && "pr-36")}>
         <div className="flex items-center h-full px-2 gap-1 overflow-x-auto w-full scrollbar-none">
           {serverSessions.map(session => (
             <div 
@@ -914,7 +980,8 @@ export default function App() {
       </div>
 
       {/* --- Main Content --- */}
-      <div className="flex-1 relative overflow-hidden bg-[#020617]">
+      {/* Content starts at top-10 (40px) to clear the fixed TitleBar */}
+      <div className="flex-1 relative overflow-hidden bg-[#020617] mt-10">
         {serverSessions.map(session => (
            <div key={session.id} className={cn("absolute inset-0 w-full h-full", activeSessionId === session.id ? "z-0" : "invisible")}>
               <SessionView 
