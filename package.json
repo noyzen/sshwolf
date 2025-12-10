@@ -28,9 +28,10 @@
       "signAndEditExecutable": false,
       "verifyUpdateCodeSignature": false,
       "target": [
+        "nsis",
         "zip"
       ],
-      "icon": "resources/icon.ico"
+      "icon": "public/appicon.png"
     }
   },
   "dependencies": {
