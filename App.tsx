@@ -7,8 +7,7 @@ import {
   Archive, Expand, Edit2, Monitor, ArrowUp, Lock, Edit3,
   Zap, Save, CheckSquare, Square, Key, Shield, Type, WrapText,
   Minus, AlignLeft, AlertTriangle, Search, History, Play, Star,
-  Loader2, Copy, Scissors, Clipboard, LayoutGrid, List, Check,
-  MoreVertical
+  Loader2, Copy, Scissors, Clipboard, LayoutGrid, List, Check
 } from 'lucide-react';
 import { SSHConnection, FileEntry, ServerSession, SubTab, QuickCommand, ClipboardState, ClipboardItem } from './types';
 import clsx from 'clsx';
@@ -28,7 +27,7 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-lg", hideCl
   if (!isOpen) return null;
   // Modal sits BELOW the titlebar (top-10) to respect the separate window controls area
   return (
-    <div className="fixed left-0 right-0 bottom-0 top-10 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+    <div className="fixed left-0 right-0 bottom-0 top-10 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className={cn("bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full overflow-hidden flex flex-col max-h-[90vh]", maxWidth)}>
         <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-950/50 shrink-0">
           <h3 className="text-lg font-semibold text-slate-200">{title}</h3>
@@ -631,8 +630,10 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
 
   // Selection Logic
   const handleSelect = (file: FileEntry, index: number, e: React.MouseEvent) => {
-    e.stopPropagation(); // Stop bubbling to container which clears selection
+    // If not holding ctrl/shift, regular click should clear unless we are clicking inside a selection to drag (not implemented)
+    // Here we implement standard explorer behavior
     
+    // e.stopPropagation() is handled in the wrapper
     const filename = file.filename;
     let newSelected = new Set(selected);
 
@@ -643,21 +644,22 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
     } else if (e.shiftKey && lastSelectedIndex !== -1) {
         const start = Math.min(lastSelectedIndex, index);
         const end = Math.max(lastSelectedIndex, index);
+        // Add range, but usually Shift+Click replaces selection from anchor. 
+        // We will clear and add range to mimic standard behavior unless Ctrl is also held (handled above)
         newSelected = new Set();
-        // Preserve other selections if ctrl not held? Standard is replacement usually
-        // We will simple replace for shift range
         for (let i = start; i <= end; i++) {
             newSelected.add(files[i].filename);
         }
     } else {
+        // Single click -> Select only this one
+        // Note: Right click usually selects but preserves others if already selected. We are using left click.
         newSelected = new Set([filename]);
         setLastSelectedIndex(index);
     }
     setSelected(newSelected);
   };
 
-  const getSelectedFiles = () => files.filter(f => selected.has(f.filename));
-
+  // Helper actions
   const handleCreateFile = async (name: string) => {
     if (!name || !name.trim()) return;
     try {
@@ -683,8 +685,10 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
     }
   };
 
-  const handleCopy = (specificFiles?: FileEntry[]) => {
-      const selection = specificFiles || getSelectedFiles();
+  const getSelectedFiles = () => files.filter(f => selected.has(f.filename));
+
+  const handleCopy = () => {
+      const selection = getSelectedFiles();
       if (selection.length === 0) return;
 
       const items: ClipboardItem[] = selection.map(f => ({
@@ -700,8 +704,8 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
       });
   };
 
-  const handleCut = (specificFiles?: FileEntry[]) => {
-      const selection = specificFiles || getSelectedFiles();
+  const handleCut = () => {
+      const selection = getSelectedFiles();
       if (selection.length === 0) return;
 
       const items: ClipboardItem[] = selection.map(f => ({
@@ -717,8 +721,8 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
       });
   };
 
-  const handleDelete = async (specificFiles?: FileEntry[]) => {
-      const selection = specificFiles || getSelectedFiles();
+  const handleDelete = async () => {
+      const selection = getSelectedFiles();
       if (selection.length === 0) return;
       
       if (!confirm(`Are you sure you want to delete ${selection.length} item(s)?`)) return;
@@ -732,16 +736,19 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
           refreshFiles(currentPath);
       } catch (e: any) {
           alert(`Delete failed: ${e.message}`);
-          refreshFiles(currentPath); // Refresh anyway
+          refreshFiles(currentPath); // Refresh anyway to show partial success
       } finally {
           setIsLoading(false);
       }
   };
 
-  const handleDownload = async (specificFiles?: FileEntry[]) => {
-      const selection = specificFiles || getSelectedFiles();
+  const handleDownload = async () => {
+      const selection = getSelectedFiles();
       if (selection.length === 0) return;
 
+      // Filter out directories for batch download if backend doesn't support recursive
+      // The backend sftp-download-batch currently handles files.
+      // We will warn if folders are selected.
       const filesOnly = selection.filter(f => !f.isDirectory);
       if (filesOnly.length === 0 && selection.length > 0) {
           alert("Folder download is not supported in batch mode yet.");
@@ -776,7 +783,9 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
               const destDir = currentPath === '/' ? '' : currentPath;
               let destPath = `${destDir}/${item.filename}`;
               
+              // Handle name collision in same dir for copy
               if (item.path === destPath && clipboard.op === 'copy') {
+                 // Append ' copy'
                  const extIndex = item.filename.lastIndexOf('.');
                  if (extIndex > 0) {
                      destPath = `${destDir}/${item.filename.substring(0, extIndex)} copy${item.filename.substring(extIndex)}`;
@@ -786,9 +795,11 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
               }
 
               if (clipboard.op === 'cut') {
+                  // Check if same location
                   if (item.path === destPath) continue;
                   await window.electron?.sftpRename(subTab.connectionId, item.path, destPath);
               } else {
+                  // Copy
                   const escape = (p: string) => p.replace(/(["'$`\\])/g,'\\$1');
                   const cmd = `cp -r "${escape(item.path)}" "${escape(destPath)}"`;
                   const result = await window.electron?.sshExec(subTab.connectionId, cmd);
@@ -855,11 +866,11 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
                    <span className="text-sm font-medium">{selected.size} selected</span>
                </div>
                <div className="flex items-center gap-2">
-                   <button onClick={() => handleCopy()} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Copy"><Copy size={16} /></button>
-                   <button onClick={() => handleCut()} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Cut"><Scissors size={16} /></button>
+                   <button onClick={handleCopy} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Copy"><Copy size={16} /></button>
+                   <button onClick={handleCut} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Cut"><Scissors size={16} /></button>
                    <div className="w-px h-4 bg-white/20 mx-1"></div>
-                   <button onClick={() => handleDownload()} className="flex items-center gap-2 px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs font-medium transition-colors"><Download size={14} /> Download</button>
-                   <button onClick={() => handleDelete()} className="flex items-center gap-2 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded text-xs font-medium transition-colors border border-red-500/20"><Trash size={14} /> Delete</button>
+                   <button onClick={handleDownload} className="flex items-center gap-2 px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs font-medium transition-colors"><Download size={14} /> Download</button>
+                   <button onClick={handleDelete} className="flex items-center gap-2 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded text-xs font-medium transition-colors border border-red-500/20"><Trash size={14} /> Delete</button>
                    <button onClick={() => setSelected(new Set())} className="ml-2 p-1 text-indigo-300 hover:text-white"><X size={16}/></button>
                </div>
            </div>
@@ -911,7 +922,6 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
                                {!file.isDirectory && <button onClick={(e) => { e.stopPropagation(); openEditor(file); }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Edit"><Edit2 size={14} /></button>}
                                <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Rename"><Edit3 size={14} /></button>
                                <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1.5 hover:bg-slate-700 hover:text-amber-300 text-slate-500 rounded" title="Permissions"><Lock size={14} /></button>
-                               <button onClick={(e) => { e.stopPropagation(); handleDelete([file]); }} className="p-1.5 hover:bg-slate-700 hover:text-red-400 text-slate-500 rounded" title="Delete"><Trash size={14} /></button>
                             </div>
                          </td>
                        </tr>
@@ -955,15 +965,12 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
                                  {file.filename}
                              </span>
                              
-                             {/* Context buttons overlay for Grid View */}
-                             <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 z-10">
-                                  <div className="bg-slate-950/90 border border-slate-700 rounded-md shadow-xl flex flex-col overflow-hidden backdrop-blur-sm">
-                                      {!file.isDirectory && <button onClick={(e) => { e.stopPropagation(); openEditor(file); }} className="p-1.5 hover:bg-indigo-600 hover:text-white text-slate-400 transition-colors" title="Edit"><Edit2 size={12}/></button>}
-                                      <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 hover:bg-indigo-600 hover:text-white text-slate-400 transition-colors" title="Rename"><Edit3 size={12}/></button>
-                                      <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1.5 hover:bg-indigo-600 hover:text-white text-slate-400 transition-colors" title="Permissions"><Lock size={12}/></button>
-                                      <button onClick={(e) => { e.stopPropagation(); handleDelete([file]); }} className="p-1.5 hover:bg-red-600 hover:text-white text-slate-400 transition-colors" title="Delete"><Trash size={12}/></button>
-                                  </div>
-                             </div>
+                             {/* Context buttons for grid items - only show a few essential ones on hover if single item */}
+                             {!isSelected && (
+                                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1">
+                                      <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1 bg-slate-950/80 hover:bg-indigo-600 text-slate-400 hover:text-white rounded shadow-sm"><Lock size={10}/></button>
+                                 </div>
+                             )}
                          </div>
                      );
                  })}
@@ -1002,306 +1009,342 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, o
        />
     </div>
   );
-}
-
-// Need a SessionView component to handle subtabs logic
-const SessionView = ({ session, updateSession, clipboard, setClipboard }: { session: ServerSession, updateSession: (s: ServerSession) => void, clipboard: ClipboardState | null, setClipboard: (c: ClipboardState | null) => void }) => {
-    const activeSubTab = session.subTabs.find(t => t.id === session.activeSubTabId);
-
-    const handleAddTab = (type: 'terminal' | 'sftp') => {
-        const newTab: SubTab = {
-            id: crypto.randomUUID(),
-            type,
-            title: type === 'terminal' ? 'Terminal' : 'SFTP',
-            connectionId: crypto.randomUUID(),
-            path: type === 'sftp' ? '/' : undefined
-        };
-        updateSession({
-            ...session,
-            subTabs: [...session.subTabs, newTab],
-            activeSubTabId: newTab.id
-        });
-    };
-    
-    const closeTab = (id: string) => {
-        const newTabs = session.subTabs.filter(t => t.id !== id);
-        let newActive = session.activeSubTabId;
-        if (activeSubTab?.id === id) {
-            newActive = newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null;
-        }
-        updateSession({
-            ...session,
-            subTabs: newTabs,
-            activeSubTabId: newActive
-        });
-    };
-
-    const handleOpenFile = (path: string) => {
-         // Check if already open
-         const existing = session.subTabs.find(t => t.type === 'editor' && t.path === path);
-         if (existing) {
-             updateSession({ ...session, activeSubTabId: existing.id });
-             return;
-         }
-
-         const newTab: SubTab = {
-            id: crypto.randomUUID(),
-            type: 'editor',
-            title: path.split('/').pop() || 'file',
-            connectionId: crypto.randomUUID(),
-            path
-         };
-         updateSession({
-             ...session,
-             subTabs: [...session.subTabs, newTab],
-             activeSubTabId: newTab.id
-         });
-    };
-
-    return (
-        <div className="flex-1 flex flex-col min-h-0">
-             {/* SubTabs Bar */}
-             <div className="bg-[#18181b] border-b border-[#27272a] flex items-center px-2 gap-1 h-9">
-                 {session.subTabs.map(tab => (
-                     <div key={tab.id} 
-                          onClick={() => updateSession({...session, activeSubTabId: tab.id})}
-                          className={cn(
-                              "flex items-center gap-2 px-3 py-1 rounded-t text-xs cursor-pointer border-t border-x mb-[-1px] select-none h-full",
-                              session.activeSubTabId === tab.id 
-                                ? "bg-[#1e1e1e] border-[#3e3e42] text-white" 
-                                : "bg-transparent border-transparent text-slate-500 hover:bg-[#1f1f23]"
-                          )}
-                     >
-                         <span className="flex items-center gap-1.5">
-                             {tab.type === 'terminal' && <Terminal size={12}/>}
-                             {tab.type === 'sftp' && <Folder size={12}/>}
-                             {tab.type === 'editor' && <FileText size={12}/>}
-                             {tab.title}
-                         </span>
-                         <button onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }} className="hover:text-red-400 p-0.5 rounded"><X size={10}/></button>
-                     </div>
-                 ))}
-                 <div className="flex items-center ml-2 border-l border-slate-700 pl-2 gap-1">
-                     <button onClick={() => handleAddTab('terminal')} className="p-1 text-slate-500 hover:text-white" title="New Terminal"><Terminal size={14}/></button>
-                     <button onClick={() => handleAddTab('sftp')} className="p-1 text-slate-500 hover:text-white" title="New SFTP"><Folder size={14}/></button>
-                 </div>
-             </div>
-             
-             {/* Content */}
-             <div className="flex-1 bg-[#1e1e1e] relative">
-                 {session.subTabs.map(tab => (
-                     <div key={tab.id} className={cn("absolute inset-0 w-full h-full", session.activeSubTabId === tab.id ? "z-10" : "z-0 invisible")}>
-                         {tab.type === 'terminal' && (
-                             <TerminalPane subTab={tab} connection={session.connection} visible={session.activeSubTabId === tab.id} />
-                         )}
-                         {tab.type === 'sftp' && (
-                             <SFTPPane 
-                               subTab={tab} 
-                               connection={session.connection} 
-                               visible={session.activeSubTabId === tab.id}
-                               onPathChange={(p) => { }}
-                               onOpenTerminal={(path) => { }}
-                               onOpenFile={handleOpenFile}
-                               clipboard={clipboard}
-                               setClipboard={setClipboard}
-                             />
-                         )}
-                         {tab.type === 'editor' && (
-                             <FileEditorPane subTab={tab} connection={session.connection} visible={session.activeSubTabId === tab.id} />
-                         )}
-                     </div>
-                 ))}
-             </div>
-        </div>
-    );
 };
 
-const NewConnectionModal = ({ onClose, onSave }: { onClose: () => void, onSave: (c: SSHConnection) => void }) => {
-    const [conn, setConn] = useState<Partial<SSHConnection>>({ port: 22, name: 'New Connection' });
-    
-    const handleSave = () => {
-        if (!conn.host || !conn.username) return alert("Host and Username required");
-        onSave({ 
-            id: crypto.randomUUID(), 
-            name: conn.name || conn.host, 
-            host: conn.host, 
-            port: conn.port || 22, 
-            username: conn.username,
-            password: conn.password,
-            privateKeyPath: conn.privateKeyPath,
-            passphrase: conn.passphrase
-        });
-    };
-    
-    const selectKey = async () => {
-        const path = await window.electron?.selectKeyFile();
-        if (path) setConn(c => ({ ...c, privateKeyPath: path }));
-    };
+// --- Session View (Server Tab) ---
 
-    return (
-        <Modal isOpen={true} onClose={onClose} title="New Connection">
-            <div className="space-y-4">
-                <div>
-                    <label className="block text-xs text-slate-500 mb-1">Name</label>
-                    <input className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-sm" value={conn.name} onChange={e => setConn({...conn, name: e.target.value})} />
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                    <div className="col-span-2">
-                        <label className="block text-xs text-slate-500 mb-1">Host</label>
-                        <input className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-sm" value={conn.host} onChange={e => setConn({...conn, host: e.target.value})} placeholder="192.168.1.1" />
-                    </div>
-                    <div>
-                        <label className="block text-xs text-slate-500 mb-1">Port</label>
-                        <input className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-sm" type="number" value={conn.port} onChange={e => setConn({...conn, port: parseInt(e.target.value)})} />
-                    </div>
-                </div>
-                <div>
-                    <label className="block text-xs text-slate-500 mb-1">Username</label>
-                    <input className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-sm" value={conn.username} onChange={e => setConn({...conn, username: e.target.value})} />
-                </div>
-                <div>
-                    <label className="block text-xs text-slate-500 mb-1">Password (Optional)</label>
-                    <input className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-sm" type="password" value={conn.password} onChange={e => setConn({...conn, password: e.target.value})} />
-                </div>
-                <div>
-                    <label className="block text-xs text-slate-500 mb-1">Private Key (Optional)</label>
-                    <div className="flex gap-2">
-                        <input className="flex-1 bg-slate-950 border border-slate-800 rounded p-2 text-sm" value={conn.privateKeyPath || ''} readOnly placeholder="Select key file..." />
-                        <button onClick={selectKey} className="px-3 bg-slate-800 rounded hover:bg-slate-700 text-sm"><Folder size={14}/></button>
-                    </div>
-                </div>
-                {conn.privateKeyPath && (
-                    <div>
-                        <label className="block text-xs text-slate-500 mb-1">Passphrase (if encrypted)</label>
-                        <input className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-sm" type="password" value={conn.passphrase} onChange={e => setConn({...conn, passphrase: e.target.value})} />
-                    </div>
+const SessionView = ({ session, visible, onUpdate, onClose, clipboard, setClipboard }: { session: ServerSession, visible: boolean, onUpdate: (s: ServerSession) => void, onClose: () => void, clipboard: ClipboardState | null, setClipboard: (s: ClipboardState | null) => void }) => {
+  
+  const addSubTab = (type: 'terminal' | 'sftp' | 'editor', path?: string) => {
+    let title = 'Files';
+    if (type === 'terminal') title = path ? 'Terminal' : `Terminal ${session.subTabs.filter(t => t.type === 'terminal').length + 1}`;
+    if (type === 'editor') title = path?.split('/').pop() || 'Untitled';
+
+    const newTab: SubTab = {
+      id: crypto.randomUUID(),
+      type,
+      title,
+      connectionId: crypto.randomUUID(), // Each subtab gets its own connection
+      path: path || '/'
+    };
+    onUpdate({
+      ...session,
+      subTabs: [...session.subTabs, newTab],
+      activeSubTabId: newTab.id
+    });
+  };
+
+  const closeSubTab = (tabId: string) => {
+    // Cleanup backend connection
+    const tab = session.subTabs.find(t => t.id === tabId);
+    if (tab) window.electron?.sshDisconnect(tab.connectionId);
+    
+    const newTabs = session.subTabs.filter(t => t.id !== tabId);
+    let newActive = session.activeSubTabId;
+    if (newActive === tabId) {
+       newActive = newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null;
+    }
+    onUpdate({ ...session, subTabs: newTabs, activeSubTabId: newActive });
+  };
+
+  const updateSubTab = (tabId: string, updates: Partial<SubTab>) => {
+    const newTabs = session.subTabs.map(t => t.id === tabId ? { ...t, ...updates } : t);
+    onUpdate({ ...session, subTabs: newTabs });
+  };
+
+  if (!visible) return null; 
+
+  return (
+    <div className="flex flex-col h-full w-full">
+      {/* Sub-Tab Bar */}
+      <div className="h-9 bg-[#0f172a] border-b border-slate-800 flex items-center px-2 shrink-0 select-none">
+         <div className="flex items-center gap-1 overflow-x-auto flex-1 scrollbar-none min-w-0">
+            {session.subTabs.map(tab => (
+               <div 
+                 key={tab.id}
+                 onClick={() => onUpdate({ ...session, activeSubTabId: tab.id })}
+                 className={cn(
+                   "group flex items-center gap-2 px-3 py-1 text-xs font-medium rounded-md cursor-pointer border transition-all min-w-[120px] max-w-[200px] shrink-0",
+                   session.activeSubTabId === tab.id 
+                     ? "bg-slate-800 text-indigo-400 border-slate-700 shadow-sm" 
+                     : "text-slate-500 border-transparent hover:bg-slate-800/50 hover:text-slate-300"
+                 )}
+                 title={tab.path}
+               >
+                  {tab.type === 'terminal' ? <Terminal size={12} /> : tab.type === 'editor' ? <FileText size={12} className="text-emerald-500" /> : <Folder size={12} />}
+                  <span className="truncate flex-1">{tab.title}</span>
+                  <button onClick={(e) => { e.stopPropagation(); closeSubTab(tab.id); }} className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5"><X size={10} /></button>
+               </div>
+            ))}
+            
+            <div className="h-4 w-px bg-slate-800 mx-1 shrink-0" />
+            
+            <button onClick={() => addSubTab('terminal')} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-500 hover:text-indigo-400 hover:bg-slate-800 rounded transition-colors shrink-0" title="New Terminal">
+              <Plus size={12} /> Term
+            </button>
+            <button onClick={() => addSubTab('sftp')} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-500 hover:text-indigo-400 hover:bg-slate-800 rounded transition-colors shrink-0" title="New File Manager">
+              <Plus size={12} /> SFTP
+            </button>
+         </div>
+      </div>
+
+      {/* Content Area - Render ALL tabs but hide inactive ones to preserve state/connections */}
+      <div className="flex-1 relative bg-[#020617] overflow-hidden">
+         {session.subTabs.map(tab => (
+            <div key={tab.id} className={cn("absolute inset-0 w-full h-full", session.activeSubTabId === tab.id ? "z-10" : "z-0 invisible")}>
+                {tab.type === 'terminal' ? (
+                   <TerminalPane subTab={tab} connection={session.connection} visible={session.activeSubTabId === tab.id} />
+                ) : tab.type === 'editor' ? (
+                   <FileEditorPane subTab={tab} connection={session.connection} visible={session.activeSubTabId === tab.id} />
+                ) : (
+                   <SFTPPane 
+                     subTab={tab} 
+                     connection={session.connection} 
+                     visible={session.activeSubTabId === tab.id} 
+                     onPathChange={(path) => updateSubTab(tab.id, { path, title: path })}
+                     onOpenTerminal={(path) => addSubTab('terminal', path)}
+                     onOpenFile={(path) => addSubTab('editor', path)}
+                     clipboard={clipboard}
+                     setClipboard={setClipboard}
+                   />
                 )}
-                <div className="flex justify-end gap-2 mt-6">
-                    <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-                    <button onClick={handleSave} className="px-6 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium">Save Connection</button>
-                </div>
             </div>
-        </Modal>
-    );
+         ))}
+         {session.subTabs.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-slate-600">
+               <p className="mb-4">No open tools.</p>
+               <div className="flex gap-4">
+                  <button onClick={() => addSubTab('terminal')} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-300">Open Terminal</button>
+                  <button onClick={() => addSubTab('sftp')} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-300">Open Files</button>
+               </div>
+            </div>
+         )}
+      </div>
+    </div>
+  );
 };
+
+// --- Main App ---
 
 export default function App() {
-  const [connections, setConnections] = useState<SSHConnection[]>([]);
-  const [sessions, setSessions] = useState<ServerSession[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
-  const [showNewConnection, setShowNewConnection] = useState(false);
-
-  // Load connections on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('connections');
-    if (saved) {
-      setConnections(JSON.parse(saved));
+  // Use lazy initialization for state to prevent overwriting localStorage on initial render
+  const [serverSessions, setServerSessions] = useState<ServerSession[]>(() => {
+    try {
+      const saved = localStorage.getItem('ssh-server-sessions');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Failed to load sessions", e);
+      return [];
     }
-  }, []);
+  });
 
-  // Save connections
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(() => {
+      const savedId = localStorage.getItem('ssh-active-session-id');
+      return savedId || null;
+  });
+
+  const [connections, setConnections] = useState<SSHConnection[]>(() => {
+    try {
+      const saved = localStorage.getItem('ssh-connections');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [isManagerOpen, setManagerOpen] = useState(false);
+  const [editingConnection, setEditingConnection] = useState<Partial<SSHConnection> | null>(null);
+  const [authType, setAuthType] = useState<'password'|'key'>('password');
+  
+  // Global Clipboard State
+  const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
+
+  // Initial Check
   useEffect(() => {
-    localStorage.setItem('connections', JSON.stringify(connections));
+    if (serverSessions.length === 0) {
+      setManagerOpen(true);
+    } else if (!activeSessionId) {
+      setActiveSessionId(serverSessions[serverSessions.length - 1].id);
+    }
+  }, []); // Run once on mount
+
+  // Persistence Effects
+  useEffect(() => {
+    localStorage.setItem('ssh-server-sessions', JSON.stringify(serverSessions));
+  }, [serverSessions]);
+
+  useEffect(() => {
+    if (activeSessionId) localStorage.setItem('ssh-active-session-id', activeSessionId);
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    localStorage.setItem('ssh-connections', JSON.stringify(connections));
   }, [connections]);
 
-  const handleConnect = async (conn: SSHConnection) => {
-    // Check if session already exists
-    const existing = sessions.find(s => s.connection.id === conn.id);
+
+  useEffect(() => {
+    if (editingConnection) {
+        if (editingConnection.privateKeyPath) setAuthType('key');
+        else setAuthType('password');
+    }
+  }, [editingConnection]);
+
+  const createServerSession = (conn: SSHConnection) => {
+    // Single Instance Check
+    const existing = serverSessions.find(s => s.connection.id === conn.id);
     if (existing) {
       setActiveSessionId(existing.id);
+      setManagerOpen(false);
       return;
     }
 
+    // Default to one terminal
+    const initialTab: SubTab = {
+       id: crypto.randomUUID(),
+       type: 'terminal',
+       title: 'Terminal 1',
+       connectionId: crypto.randomUUID()
+    };
+    
     const newSession: ServerSession = {
       id: crypto.randomUUID(),
       connection: conn,
-      subTabs: [
-        { id: crypto.randomUUID(), type: 'terminal', title: 'Terminal', connectionId: crypto.randomUUID() },
-        { id: crypto.randomUUID(), type: 'sftp', title: 'SFTP', connectionId: crypto.randomUUID(), path: '/' }
-      ],
-      activeSubTabId: null // Will set first one active
+      subTabs: [initialTab],
+      activeSubTabId: initialTab.id
     };
-    newSession.activeSubTabId = newSession.subTabs[0].id;
-
-    setSessions(prev => [...prev, newSession]);
+    
+    setServerSessions(prev => [...prev, newSession]);
     setActiveSessionId(newSession.id);
-  };
-  
-  const handleCloseSession = (sessionId: string) => {
-     setSessions(prev => prev.filter(s => s.id !== sessionId));
-     if (activeSessionId === sessionId) {
-         setActiveSessionId(null);
-     }
+    setManagerOpen(false);
   };
 
-  const activeSession = sessions.find(s => s.id === activeSessionId);
+  const closeServerSession = (id: string) => {
+    const session = serverSessions.find(s => s.id === id);
+    if (session && session.subTabs.length > 0) {
+       if (!confirm(`Close ${session.connection.name} and all ${session.subTabs.length} active tabs?`)) return;
+    }
+    
+    // Disconnect all
+    session?.subTabs.forEach(t => window.electron?.sshDisconnect(t.connectionId));
+
+    setServerSessions(prev => {
+      const newSessions = prev.filter(s => s.id !== id);
+      if (activeSessionId === id) {
+        setActiveSessionId(newSessions.length > 0 ? newSessions[newSessions.length - 1].id : null);
+      }
+      return newSessions;
+    });
+  };
+
+  const handleSaveConnection = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingConnection) return;
+    const finalConn = { ...editingConnection };
+    if (authType === 'password') { delete finalConn.privateKeyPath; delete finalConn.passphrase; } 
+    else { delete finalConn.password; }
+
+    if (finalConn.id) {
+      const updated = connections.map(c => c.id === finalConn.id ? finalConn as SSHConnection : c);
+      setConnections(updated);
+    } else {
+      const newConn = { ...finalConn, id: Math.random().toString(36).substr(2, 9) } as SSHConnection;
+      setConnections([...connections, newConn]);
+    }
+    setEditingConnection(null);
+  };
 
   return (
-    <div className="flex h-screen w-screen bg-slate-950 text-slate-200 overflow-hidden font-sans">
-       {/* Sidebar */}
-       <div className="w-64 flex flex-col border-r border-slate-800 bg-slate-950 pt-10">
-           <div className="h-10 border-b border-slate-800 flex items-center px-4 font-bold text-indigo-400 select-none drag-region">
-               TERMINUS
-           </div>
-           <div className="p-2">
-               <button onClick={() => setShowNewConnection(true)} className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-lg transition-colors text-sm font-medium">
-                   <Plus size={16} /> New Connection
-               </button>
-           </div>
-           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-               {connections.map(conn => (
-                   <div key={conn.id} className="group flex items-center justify-between p-2 hover:bg-slate-900 rounded-lg cursor-pointer transition-colors" onClick={() => handleConnect(conn)}>
-                       <div className="flex items-center gap-3 overflow-hidden">
-                           <div className="bg-slate-800 p-1.5 rounded"><Server size={14} className="text-slate-400"/></div>
-                           <div className="flex flex-col overflow-hidden">
-                               <span className="text-sm font-medium truncate text-slate-300">{conn.name}</span>
-                               <span className="text-xs text-slate-500 truncate">{conn.username}@{conn.host}</span>
-                           </div>
-                       </div>
-                       <button onClick={(e) => { e.stopPropagation(); setConnections(connections.filter(c => c.id !== conn.id)) }} className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 hover:text-red-400 rounded transition-all"><Trash size={12}/></button>
-                   </div>
-               ))}
-           </div>
-       </div>
-
-       {/* Main Content */}
-       <div className="flex-1 flex flex-col min-w-0 bg-[#020617] pt-10">
-            {/* Titlebar / Tabs */}
-            <div className="h-10 flex items-center bg-slate-950 border-b border-slate-800 drag-region pl-2">
-                 <div className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-[calc(100vw-300px)]">
-                     {sessions.map(session => (
-                         <div key={session.id} 
-                              onClick={() => setActiveSessionId(session.id)}
-                              className={cn(
-                                  "group flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer border transition-all min-w-[120px] max-w-[200px] no-drag",
-                                  activeSessionId === session.id 
-                                    ? "bg-indigo-600/10 border-indigo-500/50 text-indigo-300" 
-                                    : "bg-slate-900 border-transparent hover:bg-slate-800 text-slate-400"
-                              )}
-                         >
-                             <span className="truncate flex-1">{session.connection.name}</span>
-                             <button onClick={(e) => { e.stopPropagation(); handleCloseSession(session.id); }} className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-700 rounded"><X size={10}/></button>
-                         </div>
-                     ))}
-                 </div>
+    <div className="flex flex-col h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30">
+      
+      {/* --- Main Server Tabs (Titlebar) --- */}
+      {/* 
+        CRITICAL FIX: 
+        1. Fixed height h-10 (40px)
+        2. High Z-index (z-[60]) ensures it stays above modals/overlays (which are z-50 or z-40 and top-10)
+        3. Background opaque to cover anything that might scroll behind
+      */}
+      <div className={cn("h-10 flex items-end bg-slate-950 border-b border-slate-800 select-none titlebar w-full z-[60] overflow-hidden fixed top-0 left-0 right-0", isMac && "pl-20", isWindows && "pr-36")}>
+        <div className="flex items-center h-full px-2 gap-1 overflow-x-auto w-full scrollbar-none">
+          {serverSessions.map(session => (
+            <div 
+              key={session.id}
+              onClick={() => setActiveSessionId(session.id)}
+              className={cn(
+                "group relative flex items-center gap-2 px-3 h-8 min-w-[140px] max-w-[200px] rounded-t-lg border-t border-x text-sm cursor-pointer transition-all no-drag",
+                activeSessionId === session.id ? "bg-[#0f172a] border-slate-700 text-indigo-400 z-10 font-medium shadow-sm" : "bg-slate-900/50 border-transparent text-slate-500 hover:bg-slate-900 hover:text-slate-300 mb-0.5"
+              )}
+            >
+               <Server size={12} className={activeSessionId === session.id ? "text-indigo-500" : "opacity-50"} />
+               <span className="truncate flex-1">{session.connection.name}</span>
+               <button onClick={(e) => { e.stopPropagation(); closeServerSession(session.id); }} className="opacity-0 group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400 p-0.5 rounded transition-all no-drag"><X size={12} /></button>
+               {activeSessionId === session.id && <div className="absolute -bottom-[1px] left-0 right-0 h-[1px] bg-[#0f172a] z-20" />}
             </div>
+          ))}
+          <button onClick={() => { setEditingConnection(null); setManagerOpen(true); }} className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-slate-900 text-slate-500 hover:text-indigo-400 transition-colors mb-0.5 no-drag" title="New Connection"><Plus size={18} /></button>
+        </div>
+      </div>
 
-            {/* Session Content */}
-            {activeSession ? (
-                <SessionView session={activeSession} updateSession={(s) => setSessions(prev => prev.map(x => x.id === s.id ? s : x))} clipboard={clipboard} setClipboard={setClipboard} />
-            ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-slate-600 gap-4">
-                    <Server size={48} className="opacity-20" />
-                    <p className="text-sm">Select a connection to start</p>
-                </div>
-            )}
-       </div>
+      {/* --- Main Content --- */}
+      {/* Content starts at top-10 (40px) to clear the fixed TitleBar */}
+      <div className="flex-1 relative overflow-hidden bg-[#020617] mt-10">
+        {serverSessions.map(session => (
+           <div key={session.id} className={cn("absolute inset-0 w-full h-full", activeSessionId === session.id ? "z-0" : "invisible")}>
+              <SessionView 
+                session={session} 
+                visible={activeSessionId === session.id} 
+                onUpdate={(updated) => setServerSessions(prev => prev.map(s => s.id === updated.id ? updated : s))}
+                onClose={() => closeServerSession(session.id)}
+                clipboard={clipboard}
+                setClipboard={setClipboard}
+              />
+           </div>
+        ))}
+        {serverSessions.length === 0 && !isManagerOpen && (
+           <div className="flex flex-col items-center justify-center h-full text-slate-600">
+              <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center mb-4 shadow-xl shadow-black/20"><Server size={32} /></div>
+              <h2 className="text-xl font-bold text-slate-400">No Active Sessions</h2>
+              <button onClick={() => setManagerOpen(true)} className="mt-4 text-indigo-400 hover:text-indigo-300 hover:underline">Open Connection Manager</button>
+           </div>
+        )}
+      </div>
 
-       {/* New Connection Modal */}
-       {showNewConnection && (
-           <NewConnectionModal onClose={() => setShowNewConnection(false)} onSave={(conn) => { setConnections([...connections, conn]); setShowNewConnection(false); }} />
-       )}
+      {/* --- Connection Manager Modal --- */}
+      <Modal isOpen={isManagerOpen} onClose={() => { if(serverSessions.length > 0 || editingConnection) { setEditingConnection(null); if(serverSessions.length > 0) setManagerOpen(false); }}} title={editingConnection ? (editingConnection.id ? "Edit Connection" : "New Connection") : "Connection Manager"} hideClose={!editingConnection && serverSessions.length === 0}>
+        {!editingConnection ? (
+          <div className="space-y-3">
+             <div className="grid grid-cols-1 gap-3">
+                {connections.map(conn => (
+                  <div key={conn.id} className="group bg-slate-950 border border-slate-800 hover:border-indigo-500/50 rounded-xl p-4 transition-all flex items-center justify-between">
+                     <div className="flex items-center gap-4 cursor-pointer flex-1" onClick={() => createServerSession(conn)}>
+                        <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center text-indigo-500 shadow-inner"><Server size={20} /></div>
+                        <div><h4 className="font-bold text-slate-200">{conn.name}</h4><p className="text-xs text-slate-500 font-mono">{conn.username}@{conn.host}</p></div>
+                     </div>
+                     <div className="flex gap-1">
+                        <button onClick={() => setEditingConnection(conn)} className="p-2 text-slate-500 hover:bg-slate-900 hover:text-indigo-400 rounded-lg transition-colors" title="Edit"><Edit2 size={16} /></button>
+                        <button onClick={() => { if(confirm(`Delete ${conn.name}?`)) setConnections(connections.filter(c => c.id !== conn.id)); }} className="p-2 text-slate-500 hover:bg-slate-900 hover:text-red-400 rounded-lg transition-colors" title="Delete"><Trash size={16} /></button>
+                        <button onClick={() => createServerSession(conn)} className="ml-2 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20">Connect</button>
+                     </div>
+                  </div>
+                ))}
+                <button onClick={() => setEditingConnection({ port: 22 })} className="w-full py-3 border-2 border-dashed border-slate-800 hover:border-slate-700 hover:bg-slate-900/50 text-slate-500 hover:text-slate-300 rounded-xl transition-all flex items-center justify-center gap-2 font-medium"><Plus size={18} /> Add New Connection</button>
+             </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSaveConnection} className="space-y-4">
+            <div><label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Connection Name</label><input required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700" placeholder="Production Server" value={editingConnection.name || ''} onChange={e => setEditingConnection({...editingConnection, name: e.target.value})} /></div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2"><label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Hostname / IP</label><input required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm" placeholder="192.168.1.1" value={editingConnection.host || ''} onChange={e => setEditingConnection({...editingConnection, host: e.target.value})} /></div>
+              <div><label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Port</label><input type="number" required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm" value={editingConnection.port || 22} onChange={e => setEditingConnection({...editingConnection, port: parseInt(e.target.value)})} /></div>
+            </div>
+            <div><label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Username</label><input required className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm" placeholder="root" value={editingConnection.username || ''} onChange={e => setEditingConnection({...editingConnection, username: e.target.value})} /></div>
+            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800 space-y-4">
+                 <div className="flex items-center justify-between"><label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Authentication</label><div className="flex bg-slate-900 p-0.5 rounded-lg border border-slate-800"><button type="button" onClick={() => setAuthType('password')} className={cn("px-3 py-1 text-xs font-medium rounded-md transition-all", authType === 'password' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-300")}>Password</button><button type="button" onClick={() => setAuthType('key')} className={cn("px-3 py-1 text-xs font-medium rounded-md transition-all", authType === 'key' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-300")}>Private Key</button></div></div>
+                 {authType === 'password' ? (<input type="password" className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm" placeholder="Password" value={editingConnection.password || ''} onChange={e => setEditingConnection({...editingConnection, password: e.target.value})} />) : (<div className="space-y-3"><div className="flex gap-2"><div className="relative flex-1"><Key className="absolute left-3 top-3 text-slate-600" size={16} /><input readOnly className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 pl-10 text-slate-300 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-xs" placeholder="No key selected" value={editingConnection.privateKeyPath || ''} /></div><button type="button" onClick={async () => { const path = await window.electron?.selectKeyFile(); if(path) setEditingConnection({...editingConnection, privateKeyPath: path}); }} className="px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm border border-slate-700 transition-colors">Browse</button></div><div className="relative"><Shield className="absolute left-3 top-3 text-slate-600" size={16} /><input type="password" className="w-full bg-slate-900 border border-slate-800 rounded-lg p-3 pl-10 text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder:text-slate-700 font-mono text-sm" placeholder="Passphrase (Optional)" value={editingConnection.passphrase || ''} onChange={e => setEditingConnection({...editingConnection, passphrase: e.target.value})} /></div></div>)}
+            </div>
+            <div className="pt-4 flex justify-between items-center border-t border-slate-800 mt-4"><button type="button" onClick={() => setEditingConnection(null)} className="text-slate-500 hover:text-slate-300 text-sm font-medium px-2 py-1">Back to list</button><button type="submit" className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium shadow-lg shadow-indigo-500/20 transition-all">Save Connection</button></div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }
