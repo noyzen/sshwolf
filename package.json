@@ -4,12 +4,11 @@
   "version": "1.0.0",
   "description": "Modern SSH and SFTP Client",
   "main": "electron/main.js",
-  "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:react\" \"npm run dev:electron\"",
     "dev:react": "vite",
-    "dev:electron": "wait-on tcp:5173 && tsc electron/main.ts electron/preload.ts --outDir electron --module commonjs --target es6 && electron .",
-    "build": "tsc && vite build && tsc electron/main.ts electron/preload.ts --outDir electron --module commonjs --target es6 && electron-builder",
+    "dev:electron": "wait-on tcp:5173 && tsc electron/main.ts electron/preload.ts --outDir electron --esModuleInterop --module commonjs --target es6 && electron .",
+    "build": "tsc && vite build && tsc electron/main.ts electron/preload.ts --outDir electron --esModuleInterop --module commonjs --target es6 && electron-builder",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
