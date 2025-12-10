@@ -40,6 +40,12 @@ function saveWindowState() {
 function createWindow() {
   const state = loadWindowState();
 
+  const isDev = process.env.npm_lifecycle_event === 'dev:electron' || process.argv.includes('--dev');
+  // Resolve icon path based on environment
+  const iconPath = isDev 
+    ? path.join(__dirname, '../public/appicon.png')
+    : path.join(__dirname, '../dist/appicon.png');
+
   mainWindow = new BrowserWindow({
     x: state.x,
     y: state.y,
@@ -49,6 +55,7 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: '#020617', // Slate 950
     titleBarStyle: 'hidden',
+    icon: iconPath,
     titleBarOverlay: {
       color: '#020617',
       symbolColor: '#e2e8f0',
@@ -67,8 +74,6 @@ function createWindow() {
   }
   
   mainWindow.show();
-
-  const isDev = process.env.npm_lifecycle_event === 'dev:electron' || process.argv.includes('--dev');
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');

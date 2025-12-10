@@ -397,7 +397,7 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
        <div className="h-12 border-b border-slate-800 flex items-center px-4 gap-3 bg-slate-950/50 shrink-0" onClick={e => e.stopPropagation()}>
           <div className="flex gap-1">
              <button onClick={handleUpDir} disabled={currentPath === '/'} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white disabled:opacity-30 transition-colors border border-slate-700/50"><i className="fa-solid fa-arrow-up text-[16px]" /></button>
-             <button onClick={() => refreshFiles(currentPath)} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors border border-slate-700/50"><i className={cn("fa-solid fa-rotate text-[16px]", isLoading && "fa-spin")} /></button>
+             <button onClick={() => refreshFiles(currentPath)} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors border border-slate-700/50"><i className={cn("fa-solid fa-sync text-[16px]", isLoading && "fa-spin")} /></button>
           </div>
           <form onSubmit={(e) => { e.preventDefault(); refreshFiles(pathInput); }} className="flex-1">
              <input type="text" value={pathInput} onChange={(e) => setPathInput(e.target.value)} className="w-full bg-slate-900 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 font-mono transition-all" />

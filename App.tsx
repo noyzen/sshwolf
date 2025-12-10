@@ -160,7 +160,7 @@ export default function App() {
         {serverSessions.length === 0 && !isManagerOpen && (
            <div className="flex flex-col items-center justify-center h-full text-slate-600">
               <div className="w-20 h-20 mb-4 drop-shadow-2xl">
-                <img src="appicon.png" alt="SSH Wolf" className="w-full h-full object-contain" />
+                <img src="./appicon.png" alt="SSH Wolf" className="w-full h-full object-contain" />
               </div>
               <h2 className="text-xl font-bold text-slate-400">No Active Sessions</h2>
               <button onClick={() => setManagerOpen(true)} className="mt-4 text-indigo-400 hover:text-indigo-300 hover:underline">Open Connection Manager</button>
