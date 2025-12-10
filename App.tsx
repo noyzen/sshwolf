@@ -261,8 +261,9 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
       setInputCmd('');
   };
 
+  // Only connect when visible and not already connected
   useEffect(() => {
-    if (connectedRef.current) return;
+    if (!visible || connectedRef.current) return;
     
     const initTerminal = async () => {
       connectedRef.current = true;
@@ -343,7 +344,7 @@ const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connect
     };
     initTerminal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [visible]);
 
   useEffect(() => {
     if (visible && fitAddonRef.current) {
@@ -476,8 +477,9 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }:
     }
   }, [subTab.connectionId, onPathChange]);
 
-  // Initial Connect
+  // Connect only when visible
   useEffect(() => {
+    if (!visible) return;
     const connectAndLoad = async () => {
         if (!isConnected) {
             try {
@@ -489,7 +491,7 @@ const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal }:
             }
         }
     };
-    if (visible) connectAndLoad();
+    connectAndLoad();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
@@ -693,33 +695,57 @@ const SessionView = ({ session, visible, onUpdate, onClose }: { session: ServerS
 // --- Main App ---
 
 export default function App() {
-  const [serverSessions, setServerSessions] = useState<ServerSession[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [connections, setConnections] = useState<SSHConnection[]>([]);
+  // Use lazy initialization for state to prevent overwriting localStorage on initial render
+  const [serverSessions, setServerSessions] = useState<ServerSession[]>(() => {
+    try {
+      const saved = localStorage.getItem('ssh-server-sessions');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Failed to load sessions", e);
+      return [];
+    }
+  });
+
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(() => {
+      const savedId = localStorage.getItem('ssh-active-session-id');
+      return savedId || null;
+  });
+
+  const [connections, setConnections] = useState<SSHConnection[]>(() => {
+    try {
+      const saved = localStorage.getItem('ssh-connections');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
   const [isManagerOpen, setManagerOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<Partial<SSHConnection> | null>(null);
   const [authType, setAuthType] = useState<'password'|'key'>('password');
 
-  // Load Persistence
+  // Initial Check
   useEffect(() => {
-    const savedConns = localStorage.getItem('ssh-connections');
-    if (savedConns) setConnections(JSON.parse(savedConns));
-
-    const savedSessions = localStorage.getItem('ssh-server-sessions');
-    if (savedSessions) {
-       const parsed = JSON.parse(savedSessions);
-       setServerSessions(parsed);
-       if (parsed.length > 0) setActiveSessionId(parsed[parsed.length - 1].id);
-       else setManagerOpen(true);
-    } else {
-       setManagerOpen(true);
+    if (serverSessions.length === 0) {
+      setManagerOpen(true);
+    } else if (!activeSessionId) {
+      setActiveSessionId(serverSessions[serverSessions.length - 1].id);
     }
-  }, []);
+  }, []); // Run once on mount
 
-  // Save Persistence
+  // Persistence Effects
   useEffect(() => {
     localStorage.setItem('ssh-server-sessions', JSON.stringify(serverSessions));
   }, [serverSessions]);
+
+  useEffect(() => {
+    if (activeSessionId) localStorage.setItem('ssh-active-session-id', activeSessionId);
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    localStorage.setItem('ssh-connections', JSON.stringify(connections));
+  }, [connections]);
+
 
   useEffect(() => {
     if (editingConnection) {
@@ -727,11 +753,6 @@ export default function App() {
         else setAuthType('password');
     }
   }, [editingConnection]);
-
-  const saveConnections = (conns: SSHConnection[]) => {
-    setConnections(conns);
-    localStorage.setItem('ssh-connections', JSON.stringify(conns));
-  };
 
   const createServerSession = (conn: SSHConnection) => {
     // Single Instance Check
@@ -789,10 +810,10 @@ export default function App() {
 
     if (finalConn.id) {
       const updated = connections.map(c => c.id === finalConn.id ? finalConn as SSHConnection : c);
-      saveConnections(updated);
+      setConnections(updated);
     } else {
       const newConn = { ...finalConn, id: Math.random().toString(36).substr(2, 9) } as SSHConnection;
-      saveConnections([...connections, newConn]);
+      setConnections([...connections, newConn]);
     }
     setEditingConnection(null);
   };
@@ -856,7 +877,7 @@ export default function App() {
                      </div>
                      <div className="flex gap-1">
                         <button onClick={() => setEditingConnection(conn)} className="p-2 text-slate-500 hover:bg-slate-900 hover:text-indigo-400 rounded-lg transition-colors" title="Edit"><Edit2 size={16} /></button>
-                        <button onClick={() => { if(confirm(`Delete ${conn.name}?`)) saveConnections(connections.filter(c => c.id !== conn.id)); }} className="p-2 text-slate-500 hover:bg-slate-900 hover:text-red-400 rounded-lg transition-colors" title="Delete"><Trash size={16} /></button>
+                        <button onClick={() => { if(confirm(`Delete ${conn.name}?`)) setConnections(connections.filter(c => c.id !== conn.id)); }} className="p-2 text-slate-500 hover:bg-slate-900 hover:text-red-400 rounded-lg transition-colors" title="Delete"><Trash size={16} /></button>
                         <button onClick={() => createServerSession(conn)} className="ml-2 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20">Connect</button>
                      </div>
                   </div>

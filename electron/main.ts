@@ -417,21 +417,30 @@ ipcMain.handle('sftp-write-file', async (event, { connectionId, path: remotePath
   return new Promise((resolve, reject) => {
     conn.sftp((err, sftp) => {
       if (err) { reject(err); return; }
-      const stream = sftp.createWriteStream(remotePath);
-      
-      // Use end(content) to ensure data is written and stream is closed properly,
-      // even for empty content strings.
-      
-      stream.on('close', () => {
-        sftp.end();
-        resolve({ success: true });
-      });
-      stream.on('error', (err) => {
-          sftp.end();
-          reject(err);
-      });
 
-      stream.end(content);
+      // Handle empty file creation (Touch)
+      if (content.length === 0) {
+        sftp.open(remotePath, 'w', (err, handle) => {
+          if (err) {
+            sftp.end();
+            reject(err);
+            return;
+          }
+          sftp.close(handle, (err) => {
+            sftp.end();
+            if (err) reject(err);
+            else resolve({ success: true });
+          });
+        });
+        return;
+      }
+
+      // Handle file write
+      sftp.writeFile(remotePath, content, (err) => {
+        sftp.end();
+        if (err) reject(err);
+        else resolve({ success: true });
+      });
     });
   });
 });
