@@ -16,7 +16,7 @@
   "build": {
     "appId": "com.sshwolf.app",
     "productName": "SSH Wolf",
-    "forceCodeSigning": false,
+    "asar": false,
     "directories": {
       "output": "dist-electron"
     },
@@ -26,16 +26,9 @@
     ],
     "win": {
       "target": [
-        "nsis"
+        "zip"
       ],
-      "icon": "resources/icon.ico",
-      "verifyUpdateCodeSignature": false,
-      "sign": null
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "deleteAppDataOnUninstall": true
+      "icon": "resources/icon.ico"
     }
   },
   "dependencies": {
