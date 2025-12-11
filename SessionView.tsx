@@ -55,8 +55,27 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
       }
   };
 
+  const handleTabClick = (tabId: string) => {
+      const currentSession = sessionRef.current;
+      // When clicking, clear activity flag for that tab
+      const newTabs = currentSession.subTabs.map(t => 
+        t.id === tabId ? { ...t, hasActivity: false } : t
+      );
+      onUpdate({ ...currentSession, subTabs: newTabs, activeSubTabId: tabId });
+  };
+
   const addSubTab = (type: 'terminal' | 'sftp' | 'editor', path?: string) => {
     const currentSession = sessionRef.current;
+    
+    // Prevent duplicate editor tabs for the same file
+    if (type === 'editor' && path) {
+        const existingTab = currentSession.subTabs.find(t => t.type === 'editor' && t.path === path);
+        if (existingTab) {
+            handleTabClick(existingTab.id);
+            return;
+        }
+    }
+
     let title = 'Files';
     if (type === 'terminal') title = path ? 'Terminal' : `Terminal ${currentSession.subTabs.filter(t => t.type === 'terminal').length + 1}`;
     if (type === 'editor') title = path?.split('/').pop() || 'Untitled';
@@ -112,15 +131,6 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
     onUpdate({ ...currentSession, subTabs: newTabs });
   }, [onUpdate]);
 
-  const handleTabClick = (tabId: string) => {
-      const currentSession = sessionRef.current;
-      // When clicking, clear activity flag for that tab
-      const newTabs = currentSession.subTabs.map(t => 
-        t.id === tabId ? { ...t, hasActivity: false } : t
-      );
-      onUpdate({ ...currentSession, subTabs: newTabs, activeSubTabId: tabId });
-  };
-
   if (!visible) return null; 
 
   const activeTab = session.subTabs.find(t => t.id === session.activeSubTabId);
@@ -165,7 +175,7 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
             <button onClick={() => addSubTab('terminal')} className="flex items-center gap-1 px-2 py-1 text-xs text-zinc-500 hover:text-violet-300 hover:bg-violet-500/10 rounded transition-colors shrink-0" title="New Terminal">
               <i className="fa-solid fa-plus text-[12px]" /> Term
             </button>
-            <button onClick={() => addSubTab('sftp')} className="flex items-center gap-1 px-2 py-1 text-xs text-zinc-500 hover:text-violet-300 hover:bg-violet-500/10 rounded transition-colors shrink-0" title="New File Manager">
+            <button onClick={() => addSubTab('sftp')} className="flex items-center gap-1 px-2 py-1 text-xs text-zinc-500 hover:text-violet-300 hover:bg-violet-500/10 rounded transition-colors shrink-0" title="New SFTP File Manager">
               <i className="fa-solid fa-plus text-[12px]" /> SFTP
             </button>
          </div>

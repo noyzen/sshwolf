@@ -195,10 +195,8 @@ export const FileEditorPane = ({ subTab, connection, visible, onLoading }: { sub
 
   // --- Line Numbers ---
   
-  const lineNumbers = useMemo(() => {
-     const lines = content.split('\n').length;
-     // Generating a single string is more performant than thousands of DOM nodes
-     return Array.from({ length: lines }, (_, i) => i + 1).join('\n');
+  const lineCount = useMemo(() => {
+     return content.split('\n').length;
   }, [content]);
 
   // Theme matching colors
@@ -301,32 +299,62 @@ export const FileEditorPane = ({ subTab, connection, visible, onLoading }: { sub
                     lineHeight: '1.5',
                 }}
               >
-                 <pre className="font-inherit">{lineNumbers}</pre>
+                 {Array.from({ length: lineCount }).map((_, i) => (
+                    <div 
+                        key={i} 
+                        className={cn(
+                            "transition-colors box-border border-r-2",
+                            (i + 1) === cursorPos.line 
+                              ? "text-violet-100 font-bold border-violet-500" 
+                              : "text-zinc-600 border-transparent"
+                        )}
+                        style={{ height: '1.5em' }}
+                    >
+                        {i + 1}
+                    </div>
+                 ))}
               </div>
 
-              {/* Text Area */}
-              <textarea 
-                ref={textAreaRef}
-                className={cn(
-                    "flex-1 h-full font-mono py-4 px-3 outline-none resize-none leading-relaxed custom-scrollbar border-none bg-transparent selection:bg-violet-500/30", 
-                    theme.text,
-                    wordWrap ? "whitespace-pre-wrap" : "whitespace-pre"
-                )}
-                style={{ 
-                    fontSize: `${fontSize}px`, 
-                    lineHeight: '1.5' 
-                }}
-                value={content}
-                onChange={e => { setContent(e.target.value); updateCursor(e); }}
-                onScroll={handleScroll}
-                onClick={updateCursor} 
-                onKeyUp={updateCursor} 
-                onKeyDown={handleKeyDown} 
-                spellCheck={false}
-                autoCapitalize="off"
-                autoComplete="off"
-                autoCorrect="off"
-              />
+              {/* Text Area Container */}
+              <div className="flex-1 relative h-full overflow-hidden">
+                  
+                  {/* Seamless Line Highlight (Only works accurately when word wrap is OFF) */}
+                  {!wordWrap && (
+                      <div 
+                        className="absolute w-full pointer-events-none bg-zinc-800/50 z-0" 
+                        style={{
+                            height: `${fontSize * 1.5}px`,
+                            top: `${((cursorPos.line - 1) * (fontSize * 1.5)) - (textAreaRef.current?.scrollTop || 0) + 16}px`, // +16 for py-4 padding
+                            left: 0,
+                            right: 0
+                        }}
+                      />
+                  )}
+
+                  {/* Text Area */}
+                  <textarea 
+                    ref={textAreaRef}
+                    className={cn(
+                        "absolute inset-0 w-full h-full font-mono py-4 px-3 outline-none resize-none leading-relaxed custom-scrollbar border-none bg-transparent selection:bg-violet-500/30 z-10", 
+                        theme.text,
+                        wordWrap ? "whitespace-pre-wrap" : "whitespace-pre"
+                    )}
+                    style={{ 
+                        fontSize: `${fontSize}px`, 
+                        lineHeight: '1.5' 
+                    }}
+                    value={content}
+                    onChange={e => { setContent(e.target.value); updateCursor(e); }}
+                    onScroll={handleScroll}
+                    onClick={updateCursor} 
+                    onKeyUp={updateCursor} 
+                    onKeyDown={handleKeyDown} 
+                    spellCheck={false}
+                    autoCapitalize="off"
+                    autoComplete="off"
+                    autoCorrect="off"
+                  />
+              </div>
             </>
          )}
        </div>
