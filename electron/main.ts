@@ -451,16 +451,26 @@ ipcMain.handle('sftp-read-file', async (event, { connectionId, path: remotePath 
   return new Promise((resolve, reject) => {
     conn.sftp((err, sftp) => {
       if (err) { reject(err); return; }
-      const chunks: any[] = [];
-      const stream = sftp.createReadStream(remotePath);
-      stream.on('data', (chunk) => chunks.push(chunk));
-      stream.on('end', () => {
-        sftp.end();
-        resolve(Buffer.concat(chunks).toString('utf8'));
-      });
-      stream.on('error', (err) => {
-        sftp.end();
-        reject(err);
+
+      // Check existence first to prevent ugly standard error logs from streams
+      sftp.stat(remotePath, (err, stats) => {
+        if (err) {
+          sftp.end();
+          reject(new Error(`File not found: ${remotePath}`));
+          return;
+        }
+
+        const chunks: any[] = [];
+        const stream = sftp.createReadStream(remotePath);
+        stream.on('data', (chunk) => chunks.push(chunk));
+        stream.on('end', () => {
+          sftp.end();
+          resolve(Buffer.concat(chunks).toString('utf8'));
+        });
+        stream.on('error', (err) => {
+          sftp.end();
+          reject(err);
+        });
       });
     });
   });
