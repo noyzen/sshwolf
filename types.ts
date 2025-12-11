@@ -41,6 +41,7 @@ export interface SubTab {
   connectionId: string; // Unique ID used for the backend connection
   path?: string; // For SFTP to remember location, or Editor to remember file path
   loading?: boolean;
+  hasActivity?: boolean;
 }
 
 export interface ServerSession {

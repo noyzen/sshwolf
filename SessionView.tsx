@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ServerSession, SubTab, QuickCommand, ClipboardState } from './types';
 import { cn } from './utils';
 import { TerminalPane } from './TerminalPane';
@@ -11,11 +11,10 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [inputCmd, setInputCmd] = useState('');
 
-  // Fix: Use ref to track latest session state to avoid stale closures in callbacks
+  // Critical Fix: Update ref in render body to ensure it is always fresh BEFORE effects run.
+  // This prevents background jobs from seeing stale state if they finish immediately after a tab switch.
   const sessionRef = useRef(session);
-  useEffect(() => {
-    sessionRef.current = session;
-  }, [session]);
+  sessionRef.current = session;
 
   useEffect(() => {
     const saved = localStorage.getItem('quick-commands');
@@ -39,7 +38,6 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
   };
 
   const runCommand = (cmd: string, saveToHistory = true) => {
-      // Use current session from ref
       const currentSession = sessionRef.current;
       if (!currentSession.activeSubTabId) return;
       const tab = currentSession.subTabs.find(t => t.id === currentSession.activeSubTabId);
@@ -90,16 +88,41 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
     onUpdate({ ...currentSession, subTabs: newTabs, activeSubTabId: newActive });
   };
 
-  const updateSubTab = (tabId: string, updates: Partial<SubTab>) => {
+  // Using useCallback to keep the function reference stable where possible,
+  // but it still depends on onUpdate.
+  const updateSubTab = useCallback((tabId: string, updates: Partial<SubTab>) => {
     const currentSession = sessionRef.current;
-    const newTabs = currentSession.subTabs.map(t => t.id === tabId ? { ...t, ...updates } : t);
-    // Crucial: Pass currentSession.activeSubTabId (from Ref) to ensure we don't revert user's tab switch
+    const isActive = currentSession.activeSubTabId === tabId;
+
+    let extraUpdates = {};
+    // If a background tab finishes loading, mark it as having activity
+    if (updates.loading === false && !isActive) {
+        extraUpdates = { hasActivity: true };
+    }
+    // If we are setting it to active (though usually handled by click), clear activity
+    if (isActive) {
+        extraUpdates = { hasActivity: false };
+    }
+
+    const newTabs = currentSession.subTabs.map(t => 
+        t.id === tabId ? { ...t, ...updates, ...extraUpdates } : t
+    );
+    
+    // Always use the activeSubTabId from the REF (current source of truth)
     onUpdate({ ...currentSession, subTabs: newTabs });
+  }, [onUpdate]);
+
+  const handleTabClick = (tabId: string) => {
+      const currentSession = sessionRef.current;
+      // When clicking, clear activity flag for that tab
+      const newTabs = currentSession.subTabs.map(t => 
+        t.id === tabId ? { ...t, hasActivity: false } : t
+      );
+      onUpdate({ ...currentSession, subTabs: newTabs, activeSubTabId: tabId });
   };
 
   if (!visible) return null; 
 
-  // Derived from props for rendering, but update logic uses Ref
   const activeTab = session.subTabs.find(t => t.id === session.activeSubTabId);
   const isTerminal = activeTab?.type === 'terminal';
 
@@ -113,9 +136,9 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
             {session.subTabs.map(tab => (
                <div 
                  key={tab.id}
-                 onClick={() => onUpdate({ ...session, activeSubTabId: tab.id })}
+                 onClick={() => handleTabClick(tab.id)}
                  className={cn(
-                   "group flex items-center gap-2 px-3 py-1 text-xs font-medium rounded-md cursor-pointer border transition-all min-w-[120px] max-w-[200px] shrink-0",
+                   "group relative flex items-center gap-2 px-3 py-1 text-xs font-medium rounded-md cursor-pointer border transition-all min-w-[120px] max-w-[200px] shrink-0",
                    session.activeSubTabId === tab.id 
                      ? "bg-violet-900/20 text-violet-100 border-violet-500/30 shadow-sm" 
                      : "text-zinc-500 border-transparent hover:bg-zinc-800/50 hover:text-zinc-300"
@@ -127,7 +150,14 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
                   ) : (
                     tab.type === 'terminal' ? <i className="fa-solid fa-terminal text-[12px]" /> : tab.type === 'editor' ? <i className="fa-regular fa-file-lines text-[12px] text-emerald-500" /> : <i className="fa-regular fa-folder text-[12px] text-violet-400" />
                   )}
+                  
                   <span className="truncate flex-1">{tab.title}</span>
+                  
+                  {/* Activity Indicator */}
+                  {!tab.loading && tab.hasActivity && session.activeSubTabId !== tab.id && (
+                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shadow-[0_0_5px_rgba(59,130,246,0.8)]" title="New activity"></div>
+                  )}
+
                   <button onClick={(e) => { e.stopPropagation(); closeSubTab(tab.id); }} className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5"><i className="fa-solid fa-xmark text-[10px]" /></button>
                </div>
             ))}

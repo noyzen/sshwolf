@@ -43,8 +43,12 @@ export default function App() {
     }
   }, []);
 
+  // Debounce session saving to prevent lag during rapid state updates (e.g. loading spinners)
   useEffect(() => {
-    localStorage.setItem('ssh-server-sessions', JSON.stringify(serverSessions));
+    const timer = setTimeout(() => {
+        localStorage.setItem('ssh-server-sessions', JSON.stringify(serverSessions));
+    }, 500);
+    return () => clearTimeout(timer);
   }, [serverSessions]);
 
   useEffect(() => {
