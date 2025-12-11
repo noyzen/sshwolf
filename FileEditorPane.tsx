@@ -19,6 +19,7 @@ export const FileEditorPane = ({ subTab, connection, visible, onLoading }: { sub
 
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
@@ -33,6 +34,17 @@ export const FileEditorPane = ({ subTab, connection, visible, onLoading }: { sub
       textAreaRef.current.focus();
     }
   }, [visible]);
+
+  // Sync highlight position when cursor changes
+  useEffect(() => {
+      if (highlightRef.current && textAreaRef.current) {
+         const scrollTop = textAreaRef.current.scrollTop;
+         const lineHeight = fontSize * 1.5;
+         // 16 is py-4 padding
+         const top = ((cursorPos.line - 1) * lineHeight) - scrollTop + 16;
+         highlightRef.current.style.top = `${top}px`;
+      }
+  }, [cursorPos, fontSize]);
 
   const loadFile = async () => {
     setLoading(true);
@@ -122,8 +134,15 @@ export const FileEditorPane = ({ subTab, connection, visible, onLoading }: { sub
   };
 
   const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
+    const scrollTop = e.currentTarget.scrollTop;
     if (lineNumbersRef.current) {
-      lineNumbersRef.current.scrollTop = e.currentTarget.scrollTop;
+      lineNumbersRef.current.scrollTop = scrollTop;
+    }
+    // Manually update highlight position to avoid React render lag on scroll
+    if (highlightRef.current) {
+         const lineHeight = fontSize * 1.5;
+         const top = ((cursorPos.line - 1) * lineHeight) - scrollTop + 16;
+         highlightRef.current.style.top = `${top}px`;
     }
   };
 
@@ -293,7 +312,7 @@ export const FileEditorPane = ({ subTab, connection, visible, onLoading }: { sub
               {/* Line Numbers Gutter */}
               <div 
                 ref={lineNumbersRef}
-                className={cn("h-full py-4 text-right pr-3 pl-2 select-none overflow-hidden font-mono hidden md:block w-[3.5rem] shrink-0", theme.gutter)}
+                className={cn("h-full py-4 text-right pl-2 pr-0 select-none overflow-hidden font-mono hidden md:block w-[3.5rem] shrink-0", theme.gutter)}
                 style={{ 
                     fontSize: `${fontSize}px`, 
                     lineHeight: '1.5',
@@ -303,7 +322,7 @@ export const FileEditorPane = ({ subTab, connection, visible, onLoading }: { sub
                     <div 
                         key={i} 
                         className={cn(
-                            "transition-colors box-border border-r-2",
+                            "transition-colors box-border pr-3 border-r-2",
                             (i + 1) === cursorPos.line 
                               ? "text-violet-100 font-bold border-violet-500" 
                               : "text-zinc-600 border-transparent"
@@ -321,10 +340,10 @@ export const FileEditorPane = ({ subTab, connection, visible, onLoading }: { sub
                   {/* Seamless Line Highlight (Only works accurately when word wrap is OFF) */}
                   {!wordWrap && (
                       <div 
+                        ref={highlightRef}
                         className="absolute w-full pointer-events-none bg-zinc-800/50 z-0" 
                         style={{
                             height: `${fontSize * 1.5}px`,
-                            top: `${((cursorPos.line - 1) * (fontSize * 1.5)) - (textAreaRef.current?.scrollTop || 0) + 16}px`, // +16 for py-4 padding
                             left: 0,
                             right: 0
                         }}
