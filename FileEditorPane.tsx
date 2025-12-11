@@ -212,7 +212,7 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
        <div className={cn("h-12 flex items-center justify-between px-4 shadow-sm shrink-0 z-20 relative", theme.toolbar)}>
           <div className="flex items-center gap-4 overflow-hidden">
              <div className="flex items-center gap-2 text-zinc-300">
-                <i className="fa-regular fa-file-lines text-white text-[18px]" />
+                <i className="fa-regular fa-file-lines text-violet-400 text-[18px]" />
                 <span className="font-mono text-xs truncate max-w-[300px] text-zinc-200">{subTab.path}</span>
              </div>
              <div className="h-4 w-px bg-zinc-700" />
@@ -229,7 +229,7 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
              <button onClick={loadFile} className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors" title="Reload">
                  <i className={cn("fa-solid fa-rotate text-[14px]", loading && "fa-spin")} />
              </button>
-             <button disabled={saving || loading} onClick={handleSave} className="flex items-center gap-2 px-4 py-1.5 text-xs bg-zinc-100 hover:bg-white text-zinc-950 rounded-lg transition-all disabled:opacity-50 font-medium shadow-lg shadow-zinc-500/10">
+             <button disabled={saving || loading} onClick={handleSave} className="flex items-center gap-2 px-4 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition-all disabled:opacity-50 font-medium shadow-lg shadow-violet-500/10">
                {saving ? <i className="fa-solid fa-spinner fa-spin text-[12px]" /> : <i className="fa-regular fa-floppy-disk text-[12px]" />} Save
              </button>
           </div>
@@ -249,7 +249,7 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
                         onChange={e => setFindText(e.target.value)}
                         onKeyDown={e => { if(e.key === 'Enter') performFind(e.shiftKey ? 'prev' : 'next') }}
                         placeholder="Find"
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-md py-1.5 pl-8 pr-2 text-xs text-white outline-none focus:border-zinc-500"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-md py-1.5 pl-8 pr-2 text-xs text-white outline-none focus:border-violet-500"
                       />
                    </div>
                    <div className="flex gap-0.5">
@@ -269,7 +269,7 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
                             onChange={e => setReplaceText(e.target.value)}
                             onKeyDown={e => { if(e.key === 'Enter') performReplace() }}
                             placeholder="Replace"
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded-md py-1.5 pl-8 pr-2 text-xs text-white outline-none focus:border-zinc-500"
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-md py-1.5 pl-8 pr-2 text-xs text-white outline-none focus:border-violet-500"
                           />
                       </div>
                       <button onClick={performReplace} className="px-2 py-1.5 bg-zinc-800 hover:bg-white hover:text-zinc-950 text-zinc-400 text-xs rounded transition-colors">Replace</button>
@@ -304,7 +304,7 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
               <textarea 
                 ref={textAreaRef}
                 className={cn(
-                    "flex-1 h-full font-mono py-4 px-3 outline-none resize-none leading-relaxed custom-scrollbar border-none bg-transparent", 
+                    "flex-1 h-full font-mono py-4 px-3 outline-none resize-none leading-relaxed custom-scrollbar border-none bg-transparent selection:bg-violet-500/30", 
                     theme.text,
                     wordWrap ? "whitespace-pre-wrap" : "whitespace-pre"
                 )}

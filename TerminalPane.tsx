@@ -18,7 +18,7 @@ export const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, 
       connectedRef.current = true;
       if (terminalRef.current && !xtermRef.current) {
         const term = new XTerm({
-          theme: { background: '#09090b', foreground: '#e4e4e7', cursor: '#ffffff', selectionBackground: '#3f3f46' },
+          theme: { background: '#09090b', foreground: '#e4e4e7', cursor: '#ffffff', selectionBackground: '#5b21b6' }, // Violet-800 for selection
           fontFamily: 'Menlo, Monaco, "Courier New", monospace',
           fontSize: 14, lineHeight: 1.4, cursorBlink: true, allowProposedApi: true, convertEol: true,
         });

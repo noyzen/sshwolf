@@ -40,11 +40,11 @@ export const SimpleInputModal = ({ isOpen, onClose, title, onSubmit, placeholder
           value={value} 
           onChange={e => setValue(e.target.value)} 
           placeholder={placeholder}
-          className="w-full bg-zinc-950 border border-zinc-800 rounded p-3 text-white outline-none focus:border-zinc-500" 
+          className="w-full bg-zinc-950 border border-zinc-800 rounded p-3 text-white outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/50" 
         />
         <div className="flex justify-end gap-2">
            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancel</button>
-           <button type="submit" className="px-4 py-2 text-sm bg-zinc-100 hover:bg-white text-zinc-950 rounded">{buttonLabel}</button>
+           <button type="submit" className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-500 text-white rounded">{buttonLabel}</button>
         </div>
       </form>
     </Modal>
@@ -54,7 +54,7 @@ export const SimpleInputModal = ({ isOpen, onClose, title, onSubmit, placeholder
 const PermCheckbox = ({ label, checked, onChange }: { label: string, checked: boolean, onChange: (v: boolean) => void }) => (
   <div className="flex flex-col items-center justify-center p-2 bg-zinc-950 rounded border border-zinc-800">
     <span className="text-[10px] text-zinc-500 mb-1 font-mono uppercase">{label}</span>
-    <button onClick={() => onChange(!checked)} className={cn("transition-colors", checked ? "text-white" : "text-zinc-700")}>
+    <button onClick={() => onChange(!checked)} className={cn("transition-colors", checked ? "text-violet-400" : "text-zinc-700")}>
       {checked ? <i className="fa-solid fa-square-check text-lg" /> : <i className="fa-regular fa-square text-lg" />}
     </button>
   </div>
@@ -122,14 +122,14 @@ export const PermissionsManager = ({ item, currentPath, connectionId, onClose, o
         </div>
         {item.isDirectory && (
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-zinc-600 focus:ring-zinc-500" checked={permRecursive} onChange={e => setPermRecursive(e.target.checked)} />
+            <input type="checkbox" className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-violet-600 focus:ring-violet-500" checked={permRecursive} onChange={e => setPermRecursive(e.target.checked)} />
             <span className="text-sm text-zinc-300">Apply recursively</span>
           </label>
         )}
       </div>
       <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancel</button>
-          <button onClick={handleApply} className="px-6 py-2 text-sm bg-zinc-100 hover:bg-white text-zinc-950 rounded font-medium shadow-lg shadow-zinc-500/10">Apply Permissions</button>
+          <button onClick={handleApply} className="px-6 py-2 text-sm bg-violet-600 hover:bg-violet-500 text-white rounded font-medium shadow-lg shadow-violet-500/10">Apply Permissions</button>
       </div>
     </div>
   );
@@ -230,7 +230,7 @@ export const SmartDependencyInstaller = ({
             </div>
             <div className="flex justify-end gap-3 mt-4">
               <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancel</button>
-              <button onClick={install} className="flex items-center gap-2 px-5 py-2 bg-zinc-100 hover:bg-white text-zinc-950 rounded-lg font-medium shadow-lg shadow-zinc-500/10">
+              <button onClick={install} className="flex items-center gap-2 px-5 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-lg font-medium shadow-lg shadow-violet-500/20">
                 <i className="fa-solid fa-cloud-arrow-down text-base" /> Install {tool}
               </button>
             </div>
