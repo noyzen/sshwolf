@@ -53,12 +53,12 @@ function createWindow() {
     height: state.height,
     minWidth: 800,
     minHeight: 600,
-    backgroundColor: '#020617', // Slate 950
+    backgroundColor: '#09090b', // Zinc 950
     titleBarStyle: 'hidden',
     icon: iconPath,
     titleBarOverlay: {
-      color: '#020617',
-      symbolColor: '#e2e8f0',
+      color: '#09090b',
+      symbolColor: '#e4e4e7', // Zinc 200
       height: 40 // Match the React titlebar height
     },
     webPreferences: {

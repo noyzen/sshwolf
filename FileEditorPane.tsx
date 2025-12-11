@@ -199,11 +199,11 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
 
   // Theme matching colors
   const theme = {
-      bg: "bg-slate-950",
-      toolbar: "bg-slate-900 border-b border-slate-800",
-      text: "text-slate-300",
-      gutter: "bg-slate-900 text-slate-500 border-r border-slate-800",
-      statusbar: "bg-indigo-600 text-white"
+      bg: "bg-zinc-950",
+      toolbar: "bg-zinc-900 border-b border-zinc-800",
+      text: "text-zinc-300",
+      gutter: "bg-zinc-900 text-zinc-500 border-r border-zinc-800",
+      statusbar: "bg-zinc-900 text-zinc-400 border-t border-zinc-800"
   };
 
   return (
@@ -211,25 +211,25 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
        {/* Toolbar */}
        <div className={cn("h-12 flex items-center justify-between px-4 shadow-sm shrink-0 z-20 relative", theme.toolbar)}>
           <div className="flex items-center gap-4 overflow-hidden">
-             <div className="flex items-center gap-2 text-slate-300">
-                <i className="fa-regular fa-file-lines text-indigo-400 text-[18px]" />
-                <span className="font-mono text-xs truncate max-w-[300px] text-slate-200">{subTab.path}</span>
+             <div className="flex items-center gap-2 text-zinc-300">
+                <i className="fa-regular fa-file-lines text-white text-[18px]" />
+                <span className="font-mono text-xs truncate max-w-[300px] text-zinc-200">{subTab.path}</span>
              </div>
-             <div className="h-4 w-px bg-slate-700" />
+             <div className="h-4 w-px bg-zinc-700" />
              <div className="flex items-center gap-1">
-                 <button onClick={() => setFontSize(s => Math.max(10, s-1))} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white"><i className="fa-solid fa-minus text-[14px]" /></button>
-                 <span className="text-xs text-slate-500 w-6 text-center">{fontSize}</span>
-                 <button onClick={() => setFontSize(s => Math.min(24, s+1))} className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white"><i className="fa-solid fa-plus text-[14px]" /></button>
-                 <div className="h-4 w-px bg-slate-700 mx-1" />
-                 <button onClick={() => setWordWrap(!wordWrap)} className={cn("p-1.5 rounded transition-colors", wordWrap ? "bg-indigo-600/20 text-indigo-400" : "text-slate-400 hover:bg-slate-800 hover:text-white")} title="Toggle Word Wrap"><i className="fa-solid fa-paragraph text-[14px]" /></button>
-                 <button onClick={() => setShowFind(!showFind)} className={cn("p-1.5 rounded transition-colors", showFind ? "bg-indigo-600/20 text-indigo-400" : "text-slate-400 hover:bg-slate-800 hover:text-white")} title="Find & Replace (Ctrl+F)"><i className="fa-solid fa-magnifying-glass text-[14px]" /></button>
+                 <button onClick={() => setFontSize(s => Math.max(10, s-1))} className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white"><i className="fa-solid fa-minus text-[14px]" /></button>
+                 <span className="text-xs text-zinc-500 w-6 text-center">{fontSize}</span>
+                 <button onClick={() => setFontSize(s => Math.min(24, s+1))} className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white"><i className="fa-solid fa-plus text-[14px]" /></button>
+                 <div className="h-4 w-px bg-zinc-700 mx-1" />
+                 <button onClick={() => setWordWrap(!wordWrap)} className={cn("p-1.5 rounded transition-colors", wordWrap ? "bg-zinc-800 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-white")} title="Toggle Word Wrap"><i className="fa-solid fa-paragraph text-[14px]" /></button>
+                 <button onClick={() => setShowFind(!showFind)} className={cn("p-1.5 rounded transition-colors", showFind ? "bg-zinc-800 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-white")} title="Find & Replace (Ctrl+F)"><i className="fa-solid fa-magnifying-glass text-[14px]" /></button>
              </div>
           </div>
           <div className="flex gap-2">
-             <button onClick={loadFile} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors" title="Reload">
+             <button onClick={loadFile} className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors" title="Reload">
                  <i className={cn("fa-solid fa-rotate text-[14px]", loading && "fa-spin")} />
              </button>
-             <button disabled={saving || loading} onClick={handleSave} className="flex items-center gap-2 px-4 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-all disabled:opacity-50 font-medium shadow-lg shadow-indigo-500/20">
+             <button disabled={saving || loading} onClick={handleSave} className="flex items-center gap-2 px-4 py-1.5 text-xs bg-zinc-100 hover:bg-white text-zinc-950 rounded-lg transition-all disabled:opacity-50 font-medium shadow-lg shadow-zinc-500/10">
                {saving ? <i className="fa-solid fa-spinner fa-spin text-[12px]" /> : <i className="fa-regular fa-floppy-disk text-[12px]" />} Save
              </button>
           </div>
@@ -237,11 +237,11 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
 
        {/* Find Widget */}
        {showFind && (
-         <div className="absolute top-14 right-4 z-30 w-80 bg-slate-900 border border-slate-700 shadow-2xl rounded-lg p-2 animate-in fade-in slide-in-from-top-2 duration-150">
+         <div className="absolute top-14 right-4 z-30 w-80 bg-zinc-900 border border-zinc-700 shadow-2xl rounded-lg p-2 animate-in fade-in slide-in-from-top-2 duration-150">
             <div className="flex flex-col gap-2">
                <div className="flex items-center gap-2">
                    <div className="flex-1 relative">
-                      <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-slate-500 text-[14px]"/>
+                      <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-zinc-500 text-[14px]"/>
                       <input 
                         id="find-input"
                         autoFocus
@@ -249,31 +249,31 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
                         onChange={e => setFindText(e.target.value)}
                         onKeyDown={e => { if(e.key === 'Enter') performFind(e.shiftKey ? 'prev' : 'next') }}
                         placeholder="Find"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-md py-1.5 pl-8 pr-2 text-xs text-white outline-none focus:border-indigo-500"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-md py-1.5 pl-8 pr-2 text-xs text-white outline-none focus:border-zinc-500"
                       />
                    </div>
                    <div className="flex gap-0.5">
-                       <button onClick={() => performFind('prev')} className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded" title="Previous (Shift+Enter)"><i className="fa-solid fa-arrow-up text-[14px]"/></button>
-                       <button onClick={() => performFind('next')} className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded" title="Next (Enter)"><i className="fa-solid fa-arrow-down text-[14px]"/></button>
+                       <button onClick={() => performFind('prev')} className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded" title="Previous (Shift+Enter)"><i className="fa-solid fa-arrow-up text-[14px]"/></button>
+                       <button onClick={() => performFind('next')} className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded" title="Next (Enter)"><i className="fa-solid fa-arrow-down text-[14px]"/></button>
                    </div>
-                   <button onClick={() => setShowReplace(!showReplace)} className={cn("p-1.5 rounded transition-colors", showReplace ? "bg-indigo-500/20 text-indigo-400" : "hover:bg-slate-800 text-slate-400 hover:text-white")} title="Toggle Replace"><i className="fa-solid fa-right-left text-[14px]"/></button>
-                   <button onClick={() => setShowFind(false)} className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded"><i className="fa-solid fa-xmark text-[14px]"/></button>
+                   <button onClick={() => setShowReplace(!showReplace)} className={cn("p-1.5 rounded transition-colors", showReplace ? "bg-zinc-800 text-white" : "hover:bg-zinc-800 text-zinc-400 hover:text-white")} title="Toggle Replace"><i className="fa-solid fa-right-left text-[14px]"/></button>
+                   <button onClick={() => setShowFind(false)} className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded"><i className="fa-solid fa-xmark text-[14px]"/></button>
                </div>
                
                {showReplace && (
                   <div className="flex items-center gap-2">
                       <div className="flex-1 relative">
-                          <i className="fa-solid fa-font absolute left-2.5 top-2 text-slate-500 text-[14px]"/>
+                          <i className="fa-solid fa-font absolute left-2.5 top-2 text-zinc-500 text-[14px]"/>
                           <input 
                             value={replaceText} 
                             onChange={e => setReplaceText(e.target.value)}
                             onKeyDown={e => { if(e.key === 'Enter') performReplace() }}
                             placeholder="Replace"
-                            className="w-full bg-slate-950 border border-slate-800 rounded-md py-1.5 pl-8 pr-2 text-xs text-white outline-none focus:border-indigo-500"
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-md py-1.5 pl-8 pr-2 text-xs text-white outline-none focus:border-zinc-500"
                           />
                       </div>
-                      <button onClick={performReplace} className="px-2 py-1.5 bg-slate-800 hover:bg-indigo-600 text-slate-400 hover:text-white text-xs rounded transition-colors">Replace</button>
-                      <button onClick={performReplaceAll} className="px-2 py-1.5 bg-slate-800 hover:bg-indigo-600 text-slate-400 hover:text-white text-xs rounded transition-colors">All</button>
+                      <button onClick={performReplace} className="px-2 py-1.5 bg-zinc-800 hover:bg-white hover:text-zinc-950 text-zinc-400 text-xs rounded transition-colors">Replace</button>
+                      <button onClick={performReplaceAll} className="px-2 py-1.5 bg-zinc-800 hover:bg-white hover:text-zinc-950 text-zinc-400 text-xs rounded transition-colors">All</button>
                   </div>
                )}
             </div>
@@ -283,7 +283,7 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
        {/* Editor Area */}
        <div className="flex-1 relative flex overflow-hidden">
          {loading && !content ? (
-             <div className="absolute inset-0 flex items-center justify-center text-slate-500 gap-2 z-10 bg-slate-950">
+             <div className="absolute inset-0 flex items-center justify-center text-zinc-500 gap-2 z-10 bg-zinc-950">
                  <i className="fa-solid fa-spinner fa-spin" /> Loading...
              </div>
          ) : (
@@ -291,7 +291,7 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
               {/* Line Numbers Gutter */}
               <div 
                 ref={lineNumbersRef}
-                className={cn("h-full py-4 text-right pr-3 pl-2 select-none overflow-hidden text-slate-600 font-mono hidden md:block w-[3.5rem] shrink-0", theme.gutter)}
+                className={cn("h-full py-4 text-right pr-3 pl-2 select-none overflow-hidden text-zinc-600 font-mono hidden md:block w-[3.5rem] shrink-0", theme.gutter)}
                 style={{ 
                     fontSize: `${fontSize}px`, 
                     lineHeight: '1.5',

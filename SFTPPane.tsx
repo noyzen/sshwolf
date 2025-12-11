@@ -392,18 +392,18 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#020617]" onClick={() => setSelected(new Set())} onContextMenu={(e) => handleContextMenu(e)}>
+    <div className="flex flex-col h-full bg-[#09090b]" onClick={() => setSelected(new Set())} onContextMenu={(e) => handleContextMenu(e)}>
        {/* Address Bar */}
-       <div className="h-12 border-b border-slate-800 flex items-center px-4 gap-3 bg-slate-950/50 shrink-0" onClick={e => e.stopPropagation()}>
+       <div className="h-12 border-b border-zinc-800 flex items-center px-4 gap-3 bg-zinc-950/50 shrink-0" onClick={e => e.stopPropagation()}>
           <div className="flex gap-1">
-             <button onClick={handleUpDir} disabled={currentPath === '/'} className="p-2 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white disabled:opacity-30 transition-colors border border-slate-700/50"><i className="fa-solid fa-arrow-up text-[16px]" /></button>
+             <button onClick={handleUpDir} disabled={currentPath === '/'} className="p-2 bg-zinc-800/50 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white disabled:opacity-30 transition-colors border border-zinc-700/50"><i className="fa-solid fa-arrow-up text-[16px]" /></button>
              <button 
                onClick={() => refreshFiles(currentPath)} 
                className={cn(
-                 "p-2 rounded-lg transition-all border border-slate-700/50",
+                 "p-2 rounded-lg transition-all border border-zinc-700/50",
                  isLoading 
-                   ? "text-indigo-400 border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.5)] animate-pulse bg-indigo-500/10 cursor-not-allowed" 
-                   : "bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-white"
+                   ? "text-zinc-200 border-zinc-500/50 shadow-[0_0_15px_rgba(255,255,255,0.2)] animate-pulse bg-zinc-500/10 cursor-not-allowed" 
+                   : "bg-zinc-800/50 hover:bg-zinc-800 text-zinc-400 hover:text-white"
                )}
                disabled={isLoading}
              >
@@ -411,61 +411,60 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
              </button>
           </div>
           <form onSubmit={(e) => { e.preventDefault(); refreshFiles(pathInput); }} className="flex-1">
-             <input type="text" value={pathInput} onChange={(e) => setPathInput(e.target.value)} className="w-full bg-slate-900 border border-slate-800 text-slate-300 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 font-mono transition-all" />
+             <input type="text" value={pathInput} onChange={(e) => setPathInput(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 text-zinc-300 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-zinc-500/50 focus:ring-1 focus:ring-zinc-500/50 font-mono transition-all" />
           </form>
-          <div className="h-6 w-px bg-slate-800 mx-1" />
-          <div className="flex bg-slate-900 rounded-lg border border-slate-800 p-0.5">
-             <button onClick={() => setViewMode('list')} className={cn("p-1.5 rounded-md transition-all", viewMode === 'list' ? "bg-slate-700 text-indigo-400 shadow-sm" : "text-slate-500 hover:text-slate-300")} title="List View"><i className="fa-solid fa-list-ul text-[16px]"/></button>
-             <button onClick={() => setViewMode('grid')} className={cn("p-1.5 rounded-md transition-all", viewMode === 'grid' ? "bg-slate-700 text-indigo-400 shadow-sm" : "text-slate-500 hover:text-slate-300")} title="Grid View"><i className="fa-solid fa-table-cells text-[16px]"/></button>
+          <div className="h-6 w-px bg-zinc-800 mx-1" />
+          <div className="flex bg-zinc-900 rounded-lg border border-zinc-800 p-0.5">
+             <button onClick={() => setViewMode('list')} className={cn("p-1.5 rounded-md transition-all", viewMode === 'list' ? "bg-zinc-700 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-300")} title="List View"><i className="fa-solid fa-list-ul text-[16px]"/></button>
+             <button onClick={() => setViewMode('grid')} className={cn("p-1.5 rounded-md transition-all", viewMode === 'grid' ? "bg-zinc-700 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-300")} title="Grid View"><i className="fa-solid fa-table-cells text-[16px]"/></button>
           </div>
-          <div className="h-6 w-px bg-slate-800 mx-1" />
+          <div className="h-6 w-px bg-zinc-800 mx-1" />
           <div className="flex gap-1">
-              <button onClick={handlePaste} disabled={!clipboard || isPasting || clipboard.connectionId !== subTab.connectionId} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 disabled:opacity-30 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50" title="Paste"><i className="fa-regular fa-clipboard text-[14px]" /> Paste</button>
-              <button onClick={() => setShowNewFile(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><i className="fa-solid fa-file-circle-plus text-[14px]" /></button>
-              <button onClick={() => setShowNewFolder(true)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 hover:bg-slate-800 rounded-lg text-xs font-medium text-slate-300 transition-colors border border-slate-700/50"><i className="fa-solid fa-folder-plus text-[14px]" /></button>
-              <button onClick={async () => { await window.electron?.sftpUpload(subTab.connectionId, currentPath); refreshFiles(currentPath); }} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 hover:text-indigo-300 rounded-lg text-xs font-medium transition-colors border border-indigo-500/20"><i className="fa-solid fa-upload text-[14px]" /> Upload</button>
+              <button onClick={handlePaste} disabled={!clipboard || isPasting || clipboard.connectionId !== subTab.connectionId} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800/50 hover:bg-zinc-800 disabled:opacity-30 rounded-lg text-xs font-medium text-zinc-300 transition-colors border border-zinc-700/50" title="Paste"><i className="fa-regular fa-clipboard text-[14px]" /> Paste</button>
+              <button onClick={() => setShowNewFile(true)} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800/50 hover:bg-zinc-800 rounded-lg text-xs font-medium text-zinc-300 transition-colors border border-zinc-700/50"><i className="fa-solid fa-file-circle-plus text-[14px]" /></button>
+              <button onClick={() => setShowNewFolder(true)} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800/50 hover:bg-zinc-800 rounded-lg text-xs font-medium text-zinc-300 transition-colors border border-zinc-700/50"><i className="fa-solid fa-folder-plus text-[14px]" /></button>
+              <button onClick={async () => { await window.electron?.sftpUpload(subTab.connectionId, currentPath); refreshFiles(currentPath); }} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100/10 hover:bg-zinc-100/20 text-white hover:text-zinc-200 rounded-lg text-xs font-medium transition-colors border border-zinc-500/20"><i className="fa-solid fa-upload text-[14px]" /> Upload</button>
           </div>
        </div>
 
        {/* Bulk Actions Bar (Relative Flow) */}
        {selected.size > 0 && (
-           <div className="bg-indigo-900/95 border-b border-indigo-500/30 text-white px-4 py-2 shadow-xl animate-in slide-in-from-top-2 duration-200 shrink-0" onClick={e => e.stopPropagation()}>
+           <div className="bg-zinc-900/95 border-b border-zinc-500/30 text-white px-4 py-2 shadow-xl animate-in slide-in-from-top-2 duration-200 shrink-0" onClick={e => e.stopPropagation()}>
              <div className="flex items-center justify-between">
                <div className="flex items-center gap-3">
-                   <div className="bg-indigo-500/20 p-1.5 rounded-full"><i className="fa-solid fa-check text-[14px] text-indigo-300"/></div>
+                   <div className="bg-zinc-500/20 p-1.5 rounded-full"><i className="fa-solid fa-check text-[14px] text-white"/></div>
                    <span className="text-sm font-medium">{selected.size} selected</span>
                </div>
                <div className="flex items-center gap-2">
-                   <button onClick={() => handleCopy()} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Copy"><i className="fa-regular fa-copy text-[16px]" /></button>
-                   <button onClick={() => handleCut()} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Cut"><i className="fa-solid fa-scissors text-[16px]" /></button>
-                   <button onClick={() => setShowArchive('archive')} className="p-1.5 hover:bg-white/10 rounded text-slate-200 hover:text-white" title="Zip"><i className="fa-solid fa-box-archive text-[16px]" /></button>
+                   <button onClick={() => handleCopy()} className="p-1.5 hover:bg-white/10 rounded text-zinc-200 hover:text-white" title="Copy"><i className="fa-regular fa-copy text-[16px]" /></button>
+                   <button onClick={() => handleCut()} className="p-1.5 hover:bg-white/10 rounded text-zinc-200 hover:text-white" title="Cut"><i className="fa-solid fa-scissors text-[16px]" /></button>
+                   <button onClick={() => setShowArchive('archive')} className="p-1.5 hover:bg-white/10 rounded text-zinc-200 hover:text-white" title="Zip"><i className="fa-solid fa-box-archive text-[16px]" /></button>
                    <div className="w-px h-4 bg-white/20 mx-1"></div>
                    <button onClick={() => handleDownload()} className="flex items-center gap-2 px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-xs font-medium transition-colors"><i className="fa-solid fa-download text-[14px]" /> Download</button>
                    <button onClick={() => handleDelete()} className="flex items-center gap-2 px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded text-xs font-medium transition-colors border border-red-500/20"><i className="fa-solid fa-trash-can text-[14px]" /> Delete</button>
-                   <button onClick={() => setSelected(new Set())} className="ml-2 p-1 text-indigo-300 hover:text-white"><i className="fa-solid fa-xmark text-[16px]"/></button>
+                   <button onClick={() => setSelected(new Set())} className="ml-2 p-1 text-zinc-400 hover:text-white"><i className="fa-solid fa-xmark text-[16px]"/></button>
                </div>
              </div>
            </div>
        )}
        
        {/* File View Area */}
-       <div className="flex-1 overflow-auto custom-scrollbar bg-[#020617] p-2" onClick={() => setSelected(new Set())}>
+       <div className="flex-1 overflow-auto custom-scrollbar bg-[#09090b] p-2" onClick={() => setSelected(new Set())}>
          {viewMode === 'list' ? (
              <table className="w-full text-left text-xs border-separate border-spacing-0">
-               <thead className="bg-slate-900/80 text-slate-500 sticky top-0 z-10 backdrop-blur-sm shadow-sm select-none">
+               <thead className="bg-zinc-900/80 text-zinc-500 sticky top-0 z-10 backdrop-blur-sm shadow-sm select-none">
                  <tr>
-                   <th className="p-3 pl-4 w-10 border-b border-slate-800 text-center"><button onClick={handleSelectAll} className="hover:text-indigo-400"><i className="fa-solid fa-circle-check text-[16px]"/></button></th>
-                   <th className="p-3 border-b border-slate-800 cursor-pointer hover:text-slate-300 transition-colors" onClick={() => handleSort('filename')}>
+                   <th className="p-3 pl-4 w-10 border-b border-zinc-800 text-center"><button onClick={handleSelectAll} className="hover:text-white"><i className="fa-solid fa-circle-check text-[16px]"/></button></th>
+                   <th className="p-3 border-b border-zinc-800 cursor-pointer hover:text-zinc-300 transition-colors" onClick={() => handleSort('filename')}>
                        <div className="flex items-center gap-2">Name {sortConfig.key === 'filename' && (sortConfig.direction === 'asc' ? <i className="fa-solid fa-arrow-down-a-z text-[12px]"/> : <i className="fa-solid fa-arrow-down-z-a text-[12px]"/>)}</div>
                    </th>
-                   <th className="p-3 w-24 border-b border-slate-800 cursor-pointer hover:text-slate-300 transition-colors" onClick={() => handleSort('size')}>
+                   <th className="p-3 w-24 border-b border-zinc-800 cursor-pointer hover:text-zinc-300 transition-colors" onClick={() => handleSort('size')}>
                        <div className="flex items-center gap-2">Size {sortConfig.key === 'size' && (sortConfig.direction === 'asc' ? <i className="fa-solid fa-arrow-down-a-z text-[12px]"/> : <i className="fa-solid fa-arrow-down-z-a text-[12px]"/>)}</div>
                    </th>
-                   <th className="p-3 w-24 border-b border-slate-800">Perms</th>
-                   <th className="p-3 w-32 text-right pr-6 border-b border-slate-800">Actions</th>
+                   <th className="p-3 w-24 border-b border-zinc-800">Perms</th>
                  </tr>
                </thead>
-               <tbody className="divide-y divide-slate-800/30">
+               <tbody className="divide-y divide-zinc-800/30">
                  {sortedFiles.map((file, i) => {
                      const isSelected = selected.has(file.filename);
                      const isCut = clipboard?.op === 'cut' && clipboard.items.some(it => it.filename === file.filename); 
@@ -475,23 +474,16 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
                          onClick={(e) => handleSelect(file, i, e)}
                          onContextMenu={(e) => handleContextMenu(e, file)}
                          onDoubleClick={(e) => { e.stopPropagation(); file.isDirectory ? handleNavigate(file.filename) : openEditor(file) }}
-                         className={cn("group transition-colors cursor-pointer select-none", isSelected ? "bg-indigo-900/20 hover:bg-indigo-900/30" : "hover:bg-slate-800/40", isCut && "opacity-50")} 
+                         className={cn("group transition-colors cursor-pointer select-none", isSelected ? "bg-zinc-800" : "hover:bg-zinc-800/40", isCut && "opacity-50")} 
                        >
                          <td className="p-3 pl-4 text-center">
-                             {isSelected ? <i className="fa-solid fa-square-check text-[16px] text-indigo-400 mx-auto" /> : (
-                                file.isDirectory ? <i className="fa-solid fa-folder text-[16px] text-indigo-400 fill-indigo-400/10 mx-auto" /> : <i className="fa-regular fa-file-lines text-[16px] text-slate-600 mx-auto" />
+                             {isSelected ? <i className="fa-solid fa-square-check text-[16px] text-white mx-auto" /> : (
+                                file.isDirectory ? <i className="fa-solid fa-folder text-[16px] text-zinc-100 fill-zinc-100/10 mx-auto" /> : <i className="fa-regular fa-file-lines text-[16px] text-zinc-500 mx-auto" />
                              )}
                          </td>
-                         <td className={cn("p-3 font-medium", isSelected ? "text-indigo-200" : "text-slate-300")}>{file.filename}</td>
-                         <td className="p-3 text-slate-500 font-mono">{file.isDirectory ? '-' : (file.attrs.size < 1024 ? file.attrs.size + ' B' : (file.attrs.size / 1024).toFixed(1) + ' KB')}</td>
-                         <td className="p-3 text-slate-500 font-mono text-[10px] uppercase">{file.attrs.mode.toString(8).slice(-3)}</td>
-                         <td className="p-3 text-right pr-6">
-                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                               <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 hover:bg-slate-700 hover:text-indigo-300 text-slate-500 rounded" title="Rename"><i className="fa-solid fa-pen text-[14px]" /></button>
-                               <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(file) }} className="p-1.5 hover:bg-slate-700 hover:text-red-400 text-slate-500 rounded" title="Delete"><i className="fa-solid fa-trash-can text-[14px]" /></button>
-                               <button onClick={(e) => { e.stopPropagation(); handleContextMenu(e, file); }} className="p-1.5 hover:bg-slate-700 hover:text-white text-slate-500 rounded"><i className="fa-solid fa-ellipsis-vertical text-[14px]"/></button>
-                            </div>
-                         </td>
+                         <td className={cn("p-3 font-medium", isSelected ? "text-white" : "text-zinc-300")}>{file.filename}</td>
+                         <td className="p-3 text-zinc-500 font-mono">{file.isDirectory ? '-' : (file.attrs.size < 1024 ? file.attrs.size + ' B' : (file.attrs.size / 1024).toFixed(1) + ' KB')}</td>
+                         <td className="p-3 text-zinc-500 font-mono text-[10px] uppercase">{file.attrs.mode.toString(8).slice(-3)}</td>
                        </tr>
                      );
                  })}
@@ -509,32 +501,24 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
                              onContextMenu={(e) => handleContextMenu(e, file)}
                              onDoubleClick={(e) => { e.stopPropagation(); file.isDirectory ? handleNavigate(file.filename) : openEditor(file) }}
                              className={cn("flex flex-col items-center p-3 rounded-xl cursor-pointer transition-all border select-none group relative h-32 justify-between",
-                                 isSelected ? "bg-indigo-600/20 border-indigo-500/50 shadow-lg shadow-indigo-900/20" : "bg-slate-900/30 border-transparent hover:bg-slate-800 hover:border-slate-700",
+                                 isSelected ? "bg-zinc-800 border-zinc-600 shadow-lg" : "bg-zinc-900/30 border-transparent hover:bg-zinc-800 hover:border-zinc-700",
                                  isCut && "opacity-50")}
                          >
                              {/* Selection Checkbox Overlay */}
                              <div className={cn("absolute top-2 left-2 z-10 transition-opacity", isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
-                                <div onClick={(e) => { e.stopPropagation(); toggleSelect(file.filename); }} className={cn("w-5 h-5 rounded border flex items-center justify-center cursor-pointer shadow-sm", isSelected ? "bg-indigo-600 border-indigo-500" : "bg-slate-900/90 border-slate-600 hover:border-slate-400")}>
-                                    {isSelected && <i className="fa-solid fa-check text-[12px] text-white" />}
+                                <div onClick={(e) => { e.stopPropagation(); toggleSelect(file.filename); }} className={cn("w-5 h-5 rounded border flex items-center justify-center cursor-pointer shadow-sm", isSelected ? "bg-zinc-100 border-zinc-100" : "bg-zinc-900/90 border-zinc-600 hover:border-zinc-400")}>
+                                    {isSelected && <i className="fa-solid fa-check text-[12px] text-zinc-950" />}
                                 </div>
-                             </div>
-
-                             {/* Action Toolbar Overlay */}
-                             <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                 <button onClick={(e) => { e.stopPropagation(); setShowRename({item: file, name: file.filename}) }} className="p-1.5 bg-slate-900/90 hover:bg-indigo-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Rename"><i className="fa-solid fa-pen text-[12px]"/></button>
-                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(file) }} className="p-1.5 bg-slate-900/90 hover:bg-red-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Delete"><i className="fa-solid fa-trash-can text-[12px]"/></button>
-                                 {!file.isDirectory && <button onClick={(e) => { e.stopPropagation(); openEditor(file) }} className="p-1.5 bg-slate-900/90 hover:bg-emerald-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Edit"><i className="fa-solid fa-pen-to-square text-[12px]"/></button>}
-                                 <button onClick={(e) => { e.stopPropagation(); setShowPermissions(file) }} className="p-1.5 bg-slate-900/90 hover:bg-amber-600 text-slate-400 hover:text-white rounded shadow-sm border border-slate-700" title="Permissions"><i className="fa-solid fa-lock text-[12px]"/></button>
                              </div>
 
                              <div className="flex-1 flex items-center justify-center mt-2">
                                  {file.isDirectory ? (
-                                     <i className={cn("fa-solid fa-folder text-[40px] fill-current transition-colors", isSelected ? "text-indigo-400" : "text-slate-600 group-hover:text-indigo-400")} />
+                                     <i className={cn("fa-solid fa-folder text-[40px] fill-current transition-colors", isSelected ? "text-zinc-100" : "text-zinc-600 group-hover:text-zinc-400")} />
                                  ) : (
-                                     <i className={cn("fa-regular fa-file-lines text-[40px] transition-colors", isSelected ? "text-slate-200" : "text-slate-700 group-hover:text-slate-500")} />
+                                     <i className={cn("fa-regular fa-file-lines text-[40px] transition-colors", isSelected ? "text-zinc-200" : "text-zinc-700 group-hover:text-zinc-500")} />
                                  )}
                              </div>
-                             <span className={cn("text-xs text-center w-full break-words line-clamp-2 leading-tight font-medium mt-2", isSelected ? "text-indigo-200" : "text-slate-400 group-hover:text-slate-300")}>
+                             <span className={cn("text-xs text-center w-full break-words line-clamp-2 leading-tight font-medium mt-2", isSelected ? "text-white" : "text-zinc-400 group-hover:text-zinc-300")}>
                                  {file.filename}
                              </span>
                          </div>
@@ -549,10 +533,10 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
        <Modal isOpen={!!showRename} onClose={() => setShowRename(null)} title="Rename File">
           {showRename && (
              <form onSubmit={(e) => { e.preventDefault(); window.electron?.sftpRename(subTab.connectionId, `${currentPath}/${showRename.item.filename}`, `${currentPath}/${showRename.name}`).then(() => { setShowRename(null); refreshFiles(currentPath); }); }} className="space-y-4">
-                 <input autoFocus value={showRename.name} onChange={e => setShowRename({...showRename, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded p-3 text-white outline-none focus:border-indigo-500" />
+                 <input autoFocus value={showRename.name} onChange={e => setShowRename({...showRename, name: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 rounded p-3 text-white outline-none focus:border-zinc-500" />
                  <div className="flex justify-end gap-2">
-                     <button type="button" onClick={() => setShowRename(null)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-                     <button type="submit" className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded">Rename</button>
+                     <button type="button" onClick={() => setShowRename(null)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancel</button>
+                     <button type="submit" className="px-4 py-2 text-sm bg-zinc-100 hover:bg-white text-zinc-950 rounded">Rename</button>
                  </div>
              </form>
           )}

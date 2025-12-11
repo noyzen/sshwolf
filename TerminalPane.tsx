@@ -18,7 +18,7 @@ export const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, 
       connectedRef.current = true;
       if (terminalRef.current && !xtermRef.current) {
         const term = new XTerm({
-          theme: { background: '#020617', foreground: '#e2e8f0', cursor: '#6366f1', selectionBackground: '#4338ca' },
+          theme: { background: '#09090b', foreground: '#e4e4e7', cursor: '#ffffff', selectionBackground: '#3f3f46' },
           fontFamily: 'Menlo, Monaco, "Courier New", monospace',
           fontSize: 14, lineHeight: 1.4, cursorBlink: true, allowProposedApi: true, convertEol: true,
         });
@@ -60,7 +60,7 @@ export const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, 
            }
         });
         try {
-          term.writeln(`\x1b[34mConnecting to ${connection.host}...\x1b[0m\r\n`);
+          term.writeln(`\x1b[97mConnecting to ${connection.host}...\x1b[0m\r\n`);
           await window.electron?.sshConnect({ ...connection, id: subTab.connectionId, rows: term.rows, cols: term.cols });
           setIsConnected(true);
           fitAddon.fit();

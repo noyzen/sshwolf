@@ -6,11 +6,11 @@ export const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-lg",
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 top-10 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
-      <div className={cn("bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full overflow-hidden flex flex-col max-h-[90vh]", maxWidth)} onClick={e => e.stopPropagation()}>
-        <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-950/50 shrink-0">
-          <h3 className="text-lg font-semibold text-slate-200">{title}</h3>
+      <div className={cn("bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full overflow-hidden flex flex-col max-h-[90vh]", maxWidth)} onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between items-center p-4 border-b border-zinc-800 bg-zinc-950/50 shrink-0">
+          <h3 className="text-lg font-semibold text-zinc-200">{title}</h3>
           {!hideClose && (
-            <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors p-1 hover:bg-slate-800 rounded">
+            <button onClick={onClose} className="text-zinc-400 hover:text-white transition-colors p-1 hover:bg-zinc-800 rounded">
               <i className="fa-solid fa-xmark text-xl" />
             </button>
           )}
@@ -40,11 +40,11 @@ export const SimpleInputModal = ({ isOpen, onClose, title, onSubmit, placeholder
           value={value} 
           onChange={e => setValue(e.target.value)} 
           placeholder={placeholder}
-          className="w-full bg-slate-950 border border-slate-800 rounded p-3 text-white outline-none focus:border-indigo-500" 
+          className="w-full bg-zinc-950 border border-zinc-800 rounded p-3 text-white outline-none focus:border-zinc-500" 
         />
         <div className="flex justify-end gap-2">
-           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-           <button type="submit" className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded">{buttonLabel}</button>
+           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancel</button>
+           <button type="submit" className="px-4 py-2 text-sm bg-zinc-100 hover:bg-white text-zinc-950 rounded">{buttonLabel}</button>
         </div>
       </form>
     </Modal>
@@ -52,9 +52,9 @@ export const SimpleInputModal = ({ isOpen, onClose, title, onSubmit, placeholder
 };
 
 const PermCheckbox = ({ label, checked, onChange }: { label: string, checked: boolean, onChange: (v: boolean) => void }) => (
-  <div className="flex flex-col items-center justify-center p-2 bg-slate-950 rounded border border-slate-800">
-    <span className="text-[10px] text-slate-500 mb-1 font-mono uppercase">{label}</span>
-    <button onClick={() => onChange(!checked)} className={cn("transition-colors", checked ? "text-indigo-400" : "text-slate-700")}>
+  <div className="flex flex-col items-center justify-center p-2 bg-zinc-950 rounded border border-zinc-800">
+    <span className="text-[10px] text-zinc-500 mb-1 font-mono uppercase">{label}</span>
+    <button onClick={() => onChange(!checked)} className={cn("transition-colors", checked ? "text-white" : "text-zinc-700")}>
       {checked ? <i className="fa-solid fa-square-check text-lg" /> : <i className="fa-regular fa-square text-lg" />}
     </button>
   </div>
@@ -99,37 +99,37 @@ export const PermissionsManager = ({ item, currentPath, connectionId, onClose, o
     <div className="space-y-6">
       <div className="grid grid-cols-4 gap-4 text-center">
         <div className="col-span-1"></div>
-        <div className="text-sm font-semibold text-slate-400">Read</div>
-        <div className="text-sm font-semibold text-slate-400">Write</div>
-        <div className="text-sm font-semibold text-slate-400">Execute</div>
-        <div className="flex items-center text-sm font-bold text-slate-200">Owner</div>
+        <div className="text-sm font-semibold text-zinc-400">Read</div>
+        <div className="text-sm font-semibold text-zinc-400">Write</div>
+        <div className="text-sm font-semibold text-zinc-400">Execute</div>
+        <div className="flex items-center text-sm font-bold text-zinc-200">Owner</div>
         <PermCheckbox label="R" checked={perms.own.r} onChange={v => updatePerm('own', 'r', v)} />
         <PermCheckbox label="W" checked={perms.own.w} onChange={v => updatePerm('own', 'w', v)} />
         <PermCheckbox label="X" checked={perms.own.x} onChange={v => updatePerm('own', 'x', v)} />
-        <div className="flex items-center text-sm font-bold text-slate-200">Group</div>
+        <div className="flex items-center text-sm font-bold text-zinc-200">Group</div>
         <PermCheckbox label="R" checked={perms.grp.r} onChange={v => updatePerm('grp', 'r', v)} />
         <PermCheckbox label="W" checked={perms.grp.w} onChange={v => updatePerm('grp', 'w', v)} />
         <PermCheckbox label="X" checked={perms.grp.x} onChange={v => updatePerm('grp', 'x', v)} />
-        <div className="flex items-center text-sm font-bold text-slate-200">Public</div>
+        <div className="flex items-center text-sm font-bold text-zinc-200">Public</div>
         <PermCheckbox label="R" checked={perms.pub.r} onChange={v => updatePerm('pub', 'r', v)} />
         <PermCheckbox label="W" checked={perms.pub.w} onChange={v => updatePerm('pub', 'w', v)} />
         <PermCheckbox label="X" checked={perms.pub.x} onChange={v => updatePerm('pub', 'x', v)} />
       </div>
-      <div className="flex items-center justify-between bg-slate-950 p-4 rounded-lg border border-slate-800">
+      <div className="flex items-center justify-between bg-zinc-950 p-4 rounded-lg border border-zinc-800">
         <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-400">Numeric Value:</span>
-            <span className="font-mono text-xl text-indigo-400 font-bold">{calculateOctal()}</span>
+            <span className="text-sm text-zinc-400">Numeric Value:</span>
+            <span className="font-mono text-xl text-white font-bold">{calculateOctal()}</span>
         </div>
         {item.isDirectory && (
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500" checked={permRecursive} onChange={e => setPermRecursive(e.target.checked)} />
-            <span className="text-sm text-slate-300">Apply recursively</span>
+            <input type="checkbox" className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-zinc-600 focus:ring-zinc-500" checked={permRecursive} onChange={e => setPermRecursive(e.target.checked)} />
+            <span className="text-sm text-zinc-300">Apply recursively</span>
           </label>
         )}
       </div>
       <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-          <button onClick={handleApply} className="px-6 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium shadow-lg shadow-indigo-500/20">Apply Permissions</button>
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancel</button>
+          <button onClick={handleApply} className="px-6 py-2 text-sm bg-zinc-100 hover:bg-white text-zinc-950 rounded font-medium shadow-lg shadow-zinc-500/10">Apply Permissions</button>
       </div>
     </div>
   );
@@ -216,21 +216,21 @@ export const SmartDependencyInstaller = ({
       <div className="space-y-4">
         {status === 'prompt' && (
           <>
-            <div className="flex items-center gap-4 bg-amber-500/10 border border-amber-500/20 p-4 rounded-lg">
-               <div className="bg-amber-500/20 p-2 rounded-lg text-amber-500">
+            <div className="flex items-center gap-4 bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
+               <div className="bg-zinc-800 p-2 rounded-lg text-white">
                   <i className="fa-solid fa-box-open text-2xl" />
                </div>
                <div>
-                  <h4 className="font-semibold text-amber-200">Missing Dependency</h4>
-                  <p className="text-sm text-slate-400 mt-1">
+                  <h4 className="font-semibold text-zinc-200">Missing Dependency</h4>
+                  <p className="text-sm text-zinc-400 mt-1">
                     The command <code>{tool}</code> is required for this operation but is not found on the server.
                     Would you like to attempt to install it automatically?
                   </p>
                </div>
             </div>
             <div className="flex justify-end gap-3 mt-4">
-              <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-              <button onClick={install} className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium shadow-lg shadow-indigo-500/20">
+              <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancel</button>
+              <button onClick={install} className="flex items-center gap-2 px-5 py-2 bg-zinc-100 hover:bg-white text-zinc-950 rounded-lg font-medium shadow-lg shadow-zinc-500/10">
                 <i className="fa-solid fa-cloud-arrow-down text-base" /> Install {tool}
               </button>
             </div>
@@ -239,19 +239,19 @@ export const SmartDependencyInstaller = ({
 
         {(status === 'installing' || status === 'success' || status === 'error') && (
            <div className="space-y-4">
-              <div className="bg-slate-950 rounded-lg border border-slate-800 p-4 font-mono text-xs h-64 overflow-y-auto custom-scrollbar shadow-inner">
+              <div className="bg-zinc-950 rounded-lg border border-zinc-800 p-4 font-mono text-xs h-64 overflow-y-auto custom-scrollbar shadow-inner">
                  {logs.map((log, i) => (
-                   <div key={i} className={cn("mb-1", log.startsWith('ERROR') ? "text-red-400" : log.startsWith('Successfully') ? "text-emerald-400" : "text-slate-400")}>
+                   <div key={i} className={cn("mb-1", log.startsWith('ERROR') ? "text-red-400" : log.startsWith('Successfully') ? "text-emerald-400" : "text-zinc-400")}>
                      {log}
                    </div>
                  ))}
                  {status === 'installing' && (
-                   <div className="animate-pulse text-indigo-400 mt-2">_</div>
+                   <div className="animate-pulse text-zinc-400 mt-2">_</div>
                  )}
               </div>
               
               <div className="flex justify-end gap-3">
-                 {status === 'installing' && <div className="flex items-center gap-2 text-slate-400 text-sm"><i className="fa-solid fa-spinner fa-spin text-sm" /> Installing...</div>}
+                 {status === 'installing' && <div className="flex items-center gap-2 text-zinc-400 text-sm"><i className="fa-solid fa-spinner fa-spin text-sm" /> Installing...</div>}
                  
                  {status === 'success' && (
                    <button onClick={onSuccess} className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium shadow-lg shadow-emerald-500/20">
@@ -260,7 +260,7 @@ export const SmartDependencyInstaller = ({
                  )}
                  
                  {status === 'error' && (
-                   <button onClick={onClose} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg">Close</button>
+                   <button onClick={onClose} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg">Close</button>
                  )}
               </div>
            </div>
@@ -291,19 +291,19 @@ export const ContextMenu = ({ x, y, options, onClose }: { x: number, y: number, 
 
   return (
     <div 
-      className="fixed z-[9999] w-52 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl py-1 animate-in fade-in zoom-in-95 duration-100"
+      className="fixed z-[9999] w-52 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl py-1 animate-in fade-in zoom-in-95 duration-100"
       style={{ left: adjustedX, top: adjustedY }}
       onClick={e => e.stopPropagation()}
       onContextMenu={e => e.preventDefault()}
     >
       {options.map((opt, i) => (
         <React.Fragment key={i}>
-          {opt.separator && <div className="h-px bg-slate-800 my-1" />}
+          {opt.separator && <div className="h-px bg-zinc-800 my-1" />}
           <button
             onClick={() => { opt.onClick(); onClose(); }}
             className={cn(
               "w-full flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors text-left",
-              opt.danger ? "text-red-400 hover:bg-red-500/10" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              opt.danger ? "text-red-400 hover:bg-red-500/10" : "text-zinc-300 hover:bg-zinc-800 hover:text-white"
             )}
           >
             {opt.icon && <span className="opacity-70">{opt.icon}</span>}

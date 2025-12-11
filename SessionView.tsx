@@ -95,7 +95,7 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
 
   return (
     <div className="flex flex-col h-full w-full">
-      <div className="h-9 bg-[#0f172a] border-b border-slate-800 flex items-center px-2 shrink-0 select-none justify-between">
+      <div className="h-9 bg-[#09090b] border-b border-zinc-800 flex items-center px-2 shrink-0 select-none justify-between">
          <div className="flex items-center gap-1 overflow-x-auto flex-1 scrollbar-none min-w-0">
             {session.subTabs.map(tab => (
                <div 
@@ -104,8 +104,8 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
                  className={cn(
                    "group flex items-center gap-2 px-3 py-1 text-xs font-medium rounded-md cursor-pointer border transition-all min-w-[120px] max-w-[200px] shrink-0",
                    session.activeSubTabId === tab.id 
-                     ? "bg-slate-800 text-indigo-400 border-slate-700 shadow-sm" 
-                     : "text-slate-500 border-transparent hover:bg-slate-800/50 hover:text-slate-300"
+                     ? "bg-zinc-800 text-white border-zinc-700 shadow-sm" 
+                     : "text-zinc-500 border-transparent hover:bg-zinc-800/50 hover:text-zinc-300"
                  )}
                  title={tab.path}
                >
@@ -114,11 +114,11 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
                   <button onClick={(e) => { e.stopPropagation(); closeSubTab(tab.id); }} className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5"><i className="fa-solid fa-xmark text-[10px]" /></button>
                </div>
             ))}
-            <div className="h-4 w-px bg-slate-800 mx-1 shrink-0" />
-            <button onClick={() => addSubTab('terminal')} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-500 hover:text-indigo-400 hover:bg-slate-800 rounded transition-colors shrink-0" title="New Terminal">
+            <div className="h-4 w-px bg-zinc-800 mx-1 shrink-0" />
+            <button onClick={() => addSubTab('terminal')} className="flex items-center gap-1 px-2 py-1 text-xs text-zinc-500 hover:text-white hover:bg-zinc-800 rounded transition-colors shrink-0" title="New Terminal">
               <i className="fa-solid fa-plus text-[12px]" /> Term
             </button>
-            <button onClick={() => addSubTab('sftp')} className="flex items-center gap-1 px-2 py-1 text-xs text-slate-500 hover:text-indigo-400 hover:bg-slate-800 rounded transition-colors shrink-0" title="New File Manager">
+            <button onClick={() => addSubTab('sftp')} className="flex items-center gap-1 px-2 py-1 text-xs text-zinc-500 hover:text-white hover:bg-zinc-800 rounded transition-colors shrink-0" title="New File Manager">
               <i className="fa-solid fa-plus text-[12px]" /> SFTP
             </button>
          </div>
@@ -126,41 +126,41 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
            <div className="relative ml-2">
              <button 
                 onClick={() => setShowQuickCmds(!showQuickCmds)}
-                className={cn("flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded transition-colors border", showQuickCmds ? "bg-indigo-600 border-indigo-500 text-white" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white")}
+                className={cn("flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded transition-colors border", showQuickCmds ? "bg-zinc-100 border-zinc-100 text-zinc-950" : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white")}
              >
                 <i className="fa-solid fa-bolt text-[12px]" /> Commands
              </button>
              {showQuickCmds && (
-                  <div className="absolute right-0 top-full mt-2 w-80 bg-slate-900 border border-slate-700 rounded-lg shadow-xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[500px] z-50">
-                      <div className="p-3 border-b border-slate-800 space-y-2 bg-slate-950/50 rounded-t-lg">
+                  <div className="absolute right-0 top-full mt-2 w-80 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[500px] z-50">
+                      <div className="p-3 border-b border-zinc-800 space-y-2 bg-zinc-950/50 rounded-t-lg">
                           <div className="relative">
-                              <i className="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-[14px]" />
+                              <i className="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-zinc-500 text-[14px]" />
                               <input 
                                 autoFocus
                                 placeholder="Filter or Type command..." 
-                                className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 pl-9 text-xs text-white focus:border-indigo-500 outline-none"
+                                className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 pl-9 text-xs text-white focus:border-zinc-500 outline-none"
                                 value={inputCmd}
                                 onChange={e => setInputCmd(e.target.value)}
                                 onKeyDown={e => { if(e.key === 'Enter') runCommand(inputCmd); }}
                               />
                           </div>
                           <div className="flex gap-2">
-                             <button onClick={() => runCommand(inputCmd)} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><i className="fa-solid fa-play text-[12px]" /> Run</button>
-                             <button onClick={() => saveQuickCommand(inputCmd, inputCmd)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><i className="fa-regular fa-floppy-disk text-[12px]" /> Save</button>
+                             <button onClick={() => runCommand(inputCmd)} className="flex-1 bg-zinc-100 hover:bg-white text-zinc-950 rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><i className="fa-solid fa-play text-[12px]" /> Run</button>
+                             <button onClick={() => saveQuickCommand(inputCmd, inputCmd)} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded px-2 py-1.5 text-xs font-medium flex items-center justify-center gap-2"><i className="fa-regular fa-floppy-disk text-[12px]" /> Save</button>
                           </div>
                       </div>
                       <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-4">
                           {filteredQuickCmds.length > 0 && (
                             <div>
-                                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Saved Commands</h4>
+                                <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-1">Saved Commands</h4>
                                 <div className="space-y-1">
                                     {filteredQuickCmds.map(qc => (
-                                        <div key={qc.id} className="flex items-center justify-between group p-2 hover:bg-slate-800 rounded cursor-pointer border border-transparent hover:border-slate-700" onClick={() => runCommand(qc.command, false)}>
+                                        <div key={qc.id} className="flex items-center justify-between group p-2 hover:bg-zinc-800 rounded cursor-pointer border border-transparent hover:border-zinc-700" onClick={() => runCommand(qc.command, false)}>
                                         <div className="flex flex-col overflow-hidden">
-                                            <span className="text-sm text-indigo-300 font-medium truncate">{qc.name}</span>
-                                            <span className="text-[10px] text-slate-500 font-mono truncate">{qc.command}</span>
+                                            <span className="text-sm text-white font-medium truncate">{qc.name}</span>
+                                            <span className="text-[10px] text-zinc-500 font-mono truncate">{qc.command}</span>
                                         </div>
-                                        <button onClick={(e) => { e.stopPropagation(); deleteQuickCommand(qc.id) }} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 p-1"><i className="fa-solid fa-xmark text-[12px]" /></button>
+                                        <button onClick={(e) => { e.stopPropagation(); deleteQuickCommand(qc.id) }} className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 p-1"><i className="fa-solid fa-xmark text-[12px]" /></button>
                                         </div>
                                     ))}
                                 </div>
@@ -168,12 +168,12 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
                           )}
                           {filteredHistory.length > 0 && (
                              <div>
-                                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1 flex items-center gap-2"><i className="fa-solid fa-clock-rotate-left text-[10px]" /> Recent History</h4>
+                                <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-2 px-1 flex items-center gap-2"><i className="fa-solid fa-clock-rotate-left text-[10px]" /> Recent History</h4>
                                 <div className="space-y-1">
                                     {filteredHistory.map((cmd, i) => (
-                                        <div key={i} className="flex items-center justify-between group p-2 hover:bg-slate-800 rounded cursor-pointer border border-transparent hover:border-slate-700" onClick={() => runCommand(cmd, false)}>
-                                            <span className="text-xs text-slate-400 font-mono truncate flex-1">{cmd}</span>
-                                            <button onClick={(e) => { e.stopPropagation(); saveQuickCommand(cmd, cmd); }} className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-amber-400 p-1" title="Save to Quick Commands"><i className="fa-regular fa-star text-[12px]" /></button>
+                                        <div key={i} className="flex items-center justify-between group p-2 hover:bg-zinc-800 rounded cursor-pointer border border-transparent hover:border-zinc-700" onClick={() => runCommand(cmd, false)}>
+                                            <span className="text-xs text-zinc-400 font-mono truncate flex-1">{cmd}</span>
+                                            <button onClick={(e) => { e.stopPropagation(); saveQuickCommand(cmd, cmd); }} className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-amber-400 p-1" title="Save to Quick Commands"><i className="fa-regular fa-star text-[12px]" /></button>
                                         </div>
                                     ))}
                                 </div>
@@ -186,7 +186,7 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
          )}
          <div className="w-2"></div>
       </div>
-      <div className="flex-1 relative bg-[#020617] overflow-hidden" onClick={() => setShowQuickCmds(false)}>
+      <div className="flex-1 relative bg-[#09090b] overflow-hidden" onClick={() => setShowQuickCmds(false)}>
          {session.subTabs.map(tab => (
             <div key={tab.id} className={cn("absolute inset-0 w-full h-full", session.activeSubTabId === tab.id ? "z-10" : "z-0 invisible")}>
                 {tab.type === 'terminal' ? (
@@ -208,11 +208,11 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
             </div>
          ))}
          {session.subTabs.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-slate-600">
+            <div className="flex flex-col items-center justify-center h-full text-zinc-600">
                <p className="mb-4">No open tools.</p>
                <div className="flex gap-4">
-                  <button onClick={() => addSubTab('terminal')} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-300">Open Terminal</button>
-                  <button onClick={() => addSubTab('sftp')} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-300">Open Files</button>
+                  <button onClick={() => addSubTab('terminal')} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-zinc-300">Open Terminal</button>
+                  <button onClick={() => addSubTab('sftp')} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded text-zinc-300">Open Files</button>
                </div>
             </div>
          )}
