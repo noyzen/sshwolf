@@ -127,31 +127,41 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-zinc-200 font-sans selection:bg-violet-500/30">
-      <div className={cn("h-10 flex items-end bg-zinc-950 border-b border-zinc-800 select-none titlebar w-full z-[60] overflow-hidden fixed top-0 left-0 right-0", isMac && "pl-20", isWindows && "pr-36")}>
-        <div className="flex items-center h-full px-2 gap-1 overflow-x-auto w-full scrollbar-none">
+      {/* Titlebar */}
+      {/* Increased z-index to 60. removed border-b. h-10 is standard 40px. */}
+      {/* The inner container is h-[41px] to overlap the content border below by 1px, hiding it under active tab */}
+      <div className={cn("h-10 bg-zinc-950 select-none titlebar w-full z-[60] fixed top-0 left-0 right-0 flex items-start", isMac && "pl-20", isWindows && "pr-36")}>
+        <div className="flex items-end h-[41px] w-full overflow-x-auto scrollbar-none pl-2">
           {serverSessions.map(session => (
             <div 
               key={session.id}
               onClick={() => setActiveSessionId(session.id)}
               className={cn(
-                "group relative flex items-center gap-2 px-3 h-8 min-w-[140px] max-w-[200px] border-t border-x text-sm cursor-pointer transition-all no-drag",
+                "group relative flex items-center gap-2 px-4 min-w-[140px] max-w-[200px] cursor-pointer transition-all no-drag",
+                // Active: Full height (41px), bg-zinc-950 matches content, borders top/side, z-20 to sit on top of border line
                 activeSessionId === session.id 
-                  ? "bg-zinc-900 border-zinc-700 text-violet-100 z-10 font-medium shadow-sm" 
-                  : "bg-zinc-900/50 border-transparent text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300 mb-0.5"
+                  ? "h-full bg-zinc-950 text-violet-100 border-t border-x border-zinc-800 rounded-t-lg z-20" 
+                  // Inactive: Shorter, transparent, hover effect
+                  : "h-9 mb-1 bg-transparent text-zinc-500 hover:bg-zinc-900/50 hover:text-zinc-300 rounded-lg border border-transparent"
               )}
             >
                <i className={cn("fa-solid fa-server text-[12px]", activeSessionId === session.id ? "text-violet-400" : "opacity-50")} />
-               <span className="truncate flex-1">{session.connection.name}</span>
-               <button onClick={(e) => { e.stopPropagation(); closeServerSession(session.id); }} className="opacity-0 group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400 p-0.5 rounded transition-all no-drag"><i className="fa-solid fa-xmark text-[12px]" /></button>
-               {activeSessionId === session.id && <div className="absolute -bottom-[1px] left-0 right-0 h-[1px] bg-zinc-900 z-20" />}
-               {activeSessionId === session.id && <div className="absolute top-0 left-0 right-0 h-[2px] bg-violet-500 opacity-50" />}
+               <span className="truncate flex-1 text-sm font-medium">{session.connection.name}</span>
+               <button onClick={(e) => { e.stopPropagation(); closeServerSession(session.id); }} className={cn("opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all no-drag", activeSessionId === session.id ? "hover:bg-zinc-800 text-zinc-400 hover:text-red-400" : "hover:bg-zinc-800 text-zinc-500 hover:text-red-400")}><i className="fa-solid fa-xmark text-[12px]" /></button>
+               
+               {/* Active Tab Decor: Top Highlight */}
+               {activeSessionId === session.id && <div className="absolute top-0 left-0 right-0 h-[2px] bg-violet-500 rounded-t-lg opacity-80" />}
             </div>
           ))}
-          <button onClick={() => { setEditingConnection(null); setManagerOpen(true); }} className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-zinc-900 text-zinc-500 hover:text-violet-300 transition-colors mb-0.5 no-drag" title="New Connection"><i className="fa-solid fa-plus text-lg" /></button>
+          <button onClick={() => { setEditingConnection(null); setManagerOpen(true); }} className="flex items-center justify-center w-8 h-8 ml-1 mb-1.5 rounded-lg hover:bg-zinc-900 text-zinc-500 hover:text-violet-300 transition-colors no-drag" title="New Connection"><i className="fa-solid fa-plus text-lg" /></button>
         </div>
       </div>
 
-      <div className="flex-1 relative overflow-hidden bg-[#09090b] mt-10">
+      {/* Content Area - Starts at 40px (mt-10). Border-t creates the line under the titlebar. 
+          The active tab (height 41px) sits on top of this border, effectively erasing it for the active tab. 
+          The border extends full width, so it is visible under the system buttons area. 
+      */}
+      <div className="flex-1 relative overflow-hidden bg-[#09090b] mt-10 border-t border-zinc-800">
         {serverSessions.map(session => (
            <div key={session.id} className={cn("absolute inset-0 w-full h-full", activeSessionId === session.id ? "z-0" : "invisible")}>
               <SessionView 
