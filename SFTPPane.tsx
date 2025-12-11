@@ -10,11 +10,12 @@ interface SFTPPaneProps {
   onPathChange: (path: string) => void;
   onOpenTerminal: (path: string) => void;
   onOpenFile: (path: string) => void;
+  onLoading: (isLoading: boolean) => void;
   clipboard: ClipboardState | null;
   setClipboard: (state: ClipboardState | null) => void;
 }
 
-export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, onOpenFile, clipboard, setClipboard }: SFTPPaneProps) => {
+export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerminal, onOpenFile, onLoading, clipboard, setClipboard }: SFTPPaneProps) => {
   const [currentPath, setCurrentPath] = useState(subTab.path || '/');
   const [pathInput, setPathInput] = useState(currentPath);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -64,6 +65,7 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
   const refreshFiles = useCallback(async (path: string) => {
     if (!mounted.current) return;
     setIsLoading(true);
+    onLoading(true);
     setSelected(new Set());
     setLastSelectedIndex(-1);
     try {
@@ -79,22 +81,30 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
       console.error(err);
       if (err.message.includes('Not connected') && mounted.current) setIsConnected(false);
     } finally {
-      if(mounted.current) setIsLoading(false);
+      if(mounted.current) {
+         setIsLoading(false);
+         onLoading(false);
+      }
     }
-  }, [subTab.connectionId, onPathChange]);
+  }, [subTab.connectionId, onPathChange, onLoading]);
 
   useEffect(() => {
     if (!visible) return;
     const connectAndLoad = async () => {
         if (!isConnected) {
             try {
+                onLoading(true);
                 await window.electron?.sshConnect({ ...connection, id: subTab.connectionId });
                 if(mounted.current) {
                   setIsConnected(true);
+                  // refreshFiles handles the onLoading(false)
                   refreshFiles(currentPath);
+                } else {
+                  onLoading(false);
                 }
             } catch (e) {
                 console.error("SFTP Connect Error", e);
+                onLoading(false);
             }
         }
     };
@@ -251,14 +261,19 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
       if (filesToProcess.length === 0) return;
       if (!confirm(`Delete ${filesToProcess.length} item(s)?`)) return;
       setIsLoading(true);
+      onLoading(true);
       try {
           for (const file of filesToProcess) {
              const path = currentPath === '/' ? `/${file.filename}` : `${currentPath}/${file.filename}`;
              await window.electron?.sftpDelete(subTab.connectionId, path, file.isDirectory);
           }
           refreshFiles(currentPath);
-      } catch (e: any) { alert(e.message); refreshFiles(currentPath); } 
-      finally { setIsLoading(false); }
+      } catch (e: any) { 
+        alert(e.message); 
+        refreshFiles(currentPath); 
+        setIsLoading(false);
+        onLoading(false);
+      } 
   };
 
   const handleDeleteItem = async (file: FileEntry) => {
@@ -280,13 +295,18 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
           filename: f.filename,
           isDirectory: false
       }));
-      try { await window.electron?.sftpDownloadBatch(subTab.connectionId, payload); } 
+      try { 
+          onLoading(true);
+          await window.electron?.sftpDownloadBatch(subTab.connectionId, payload); 
+      } 
       catch (e: any) { if (!e.message?.includes('cancelled')) alert(e.message); }
+      finally { onLoading(false); }
   };
 
   const handlePaste = async () => {
       if (!clipboard || clipboard.items.length === 0 || clipboard.connectionId !== subTab.connectionId) return;
       setIsPasting(true);
+      onLoading(true);
       try {
           for (const item of clipboard.items) {
               const destDir = currentPath === '/' ? '' : currentPath;
@@ -308,8 +328,14 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
           }
           if (clipboard.op === 'cut') setClipboard(null);
           await refreshFiles(currentPath);
-      } catch (e: any) { alert(e.message); } 
-      finally { setIsPasting(false); }
+      } catch (e: any) { 
+          alert(e.message); 
+          setIsPasting(false);
+          onLoading(false);
+      } finally {
+          setIsPasting(false);
+          // refreshFiles (called above) will turn off loading
+      }
   };
 
   const handleArchive = async (name: string) => {
@@ -319,6 +345,7 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
     if (!(await ensureDependency('zip'))) return;
 
     setIsLoading(true);
+    onLoading(true);
     const filename = name.endsWith('.zip') ? name : name + '.zip';
     const items = getSelectedFiles().map(f => `"${f.filename}"`).join(' ');
     
@@ -327,16 +354,20 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
        await window.electron?.sshExec(subTab.connectionId, cmd);
        setShowArchive(null);
        refreshFiles(currentPath);
-    } catch (e: any) { alert(e.message); }
-    finally { setIsLoading(false); }
+    } catch (e: any) { 
+        alert(e.message); 
+        setIsLoading(false); 
+        onLoading(false); 
+    }
   };
 
   const handleExtract = async (file: FileEntry) => {
      setIsLoading(true);
+     onLoading(true);
      try {
         let cmd = '';
         if (file.filename.endsWith('.zip')) {
-            if (!(await ensureDependency('unzip'))) { setIsLoading(false); return; }
+            if (!(await ensureDependency('unzip'))) { setIsLoading(false); onLoading(false); return; }
             cmd = `cd "${currentPath}" && unzip "${file.filename}"`;
         } else if (file.filename.endsWith('.tar.gz') || file.filename.endsWith('.tgz')) {
             cmd = `cd "${currentPath}" && tar -xzf "${file.filename}"`;
@@ -345,12 +376,16 @@ export const SFTPPane = ({ subTab, connection, visible, onPathChange, onOpenTerm
         } else {
             alert('Unsupported archive format');
             setIsLoading(false);
+            onLoading(false);
             return;
         }
         await window.electron?.sshExec(subTab.connectionId, cmd);
         refreshFiles(currentPath);
-     } catch (e: any) { alert(e.message); }
-     finally { setIsLoading(false); }
+     } catch (e: any) { 
+         alert(e.message); 
+         setIsLoading(false); 
+         onLoading(false); 
+     }
   };
 
   const getContextMenuOptions = () => {

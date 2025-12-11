@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { SubTab, SSHConnection } from './types';
 import { cn } from './utils';
 
-export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab, connection: SSHConnection, visible: boolean }) => {
+export const FileEditorPane = ({ subTab, connection, visible, onLoading }: { subTab: SubTab, connection: SSHConnection, visible: boolean, onLoading: (l: boolean) => void }) => {
   const [content, setContent] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -36,6 +36,7 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
 
   const loadFile = async () => {
     setLoading(true);
+    onLoading(true);
     try {
         if (!isConnected) {
            await window.electron?.sshConnect({ ...connection, id: subTab.connectionId });
@@ -50,12 +51,14 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
         setContent(`Error loading file: ${e.message}`);
     } finally {
         setLoading(false);
+        onLoading(false);
     }
   };
 
   const handleSave = async () => {
     if (!subTab.path) return;
     setSaving(true);
+    onLoading(true);
     try {
       if (!isConnected) {
           await window.electron?.sshConnect({ ...connection, id: subTab.connectionId });
@@ -66,6 +69,7 @@ export const FileEditorPane = ({ subTab, connection, visible }: { subTab: SubTab
       alert(`Save Failed: ${e.message}`);
     } finally {
       setSaving(false);
+      onLoading(false);
     }
   };
 

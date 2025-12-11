@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ServerSession, SubTab, QuickCommand, ClipboardState } from './types';
 import { cn } from './utils';
 import { TerminalPane } from './TerminalPane';
@@ -10,6 +10,12 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
   const [quickCommands, setQuickCommands] = useState<QuickCommand[]>([]);
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
   const [inputCmd, setInputCmd] = useState('');
+
+  // Fix: Use ref to track latest session state to avoid stale closures in callbacks
+  const sessionRef = useRef(session);
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
   useEffect(() => {
     const saved = localStorage.getItem('quick-commands');
@@ -33,8 +39,10 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
   };
 
   const runCommand = (cmd: string, saveToHistory = true) => {
-      if (!session.activeSubTabId) return;
-      const tab = session.subTabs.find(t => t.id === session.activeSubTabId);
+      // Use current session from ref
+      const currentSession = sessionRef.current;
+      if (!currentSession.activeSubTabId) return;
+      const tab = currentSession.subTabs.find(t => t.id === currentSession.activeSubTabId);
       if (tab && tab.type === 'terminal') {
          window.electron?.sshWrite(tab.connectionId, cmd + '\r');
          if (saveToHistory && cmd.trim()) {
@@ -50,8 +58,9 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
   };
 
   const addSubTab = (type: 'terminal' | 'sftp' | 'editor', path?: string) => {
+    const currentSession = sessionRef.current;
     let title = 'Files';
-    if (type === 'terminal') title = path ? 'Terminal' : `Terminal ${session.subTabs.filter(t => t.type === 'terminal').length + 1}`;
+    if (type === 'terminal') title = path ? 'Terminal' : `Terminal ${currentSession.subTabs.filter(t => t.type === 'terminal').length + 1}`;
     if (type === 'editor') title = path?.split('/').pop() || 'Untitled';
 
     const newTab: SubTab = {
@@ -62,31 +71,35 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
       path: path || '/'
     };
     onUpdate({
-      ...session,
-      subTabs: [...session.subTabs, newTab],
+      ...currentSession,
+      subTabs: [...currentSession.subTabs, newTab],
       activeSubTabId: newTab.id
     });
   };
 
   const closeSubTab = (tabId: string) => {
-    const tab = session.subTabs.find(t => t.id === tabId);
+    const currentSession = sessionRef.current;
+    const tab = currentSession.subTabs.find(t => t.id === tabId);
     if (tab) window.electron?.sshDisconnect(tab.connectionId);
     
-    const newTabs = session.subTabs.filter(t => t.id !== tabId);
-    let newActive = session.activeSubTabId;
+    const newTabs = currentSession.subTabs.filter(t => t.id !== tabId);
+    let newActive = currentSession.activeSubTabId;
     if (newActive === tabId) {
        newActive = newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null;
     }
-    onUpdate({ ...session, subTabs: newTabs, activeSubTabId: newActive });
+    onUpdate({ ...currentSession, subTabs: newTabs, activeSubTabId: newActive });
   };
 
   const updateSubTab = (tabId: string, updates: Partial<SubTab>) => {
-    const newTabs = session.subTabs.map(t => t.id === tabId ? { ...t, ...updates } : t);
-    onUpdate({ ...session, subTabs: newTabs });
+    const currentSession = sessionRef.current;
+    const newTabs = currentSession.subTabs.map(t => t.id === tabId ? { ...t, ...updates } : t);
+    // Crucial: Pass currentSession.activeSubTabId (from Ref) to ensure we don't revert user's tab switch
+    onUpdate({ ...currentSession, subTabs: newTabs });
   };
 
   if (!visible) return null; 
 
+  // Derived from props for rendering, but update logic uses Ref
   const activeTab = session.subTabs.find(t => t.id === session.activeSubTabId);
   const isTerminal = activeTab?.type === 'terminal';
 
@@ -109,7 +122,11 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
                  )}
                  title={tab.path}
                >
-                  {tab.type === 'terminal' ? <i className="fa-solid fa-terminal text-[12px]" /> : tab.type === 'editor' ? <i className="fa-regular fa-file-lines text-[12px] text-emerald-500" /> : <i className="fa-regular fa-folder text-[12px] text-violet-400" />}
+                  {tab.loading ? (
+                    <i className="fa-solid fa-circle-notch fa-spin text-[10px] text-violet-400" />
+                  ) : (
+                    tab.type === 'terminal' ? <i className="fa-solid fa-terminal text-[12px]" /> : tab.type === 'editor' ? <i className="fa-regular fa-file-lines text-[12px] text-emerald-500" /> : <i className="fa-regular fa-folder text-[12px] text-violet-400" />
+                  )}
                   <span className="truncate flex-1">{tab.title}</span>
                   <button onClick={(e) => { e.stopPropagation(); closeSubTab(tab.id); }} className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5"><i className="fa-solid fa-xmark text-[10px]" /></button>
                </div>
@@ -190,15 +207,26 @@ export const SessionView = ({ session, visible, onUpdate, onClose, clipboard, se
          {session.subTabs.map(tab => (
             <div key={tab.id} className={cn("absolute inset-0 w-full h-full", session.activeSubTabId === tab.id ? "z-10" : "z-0 invisible")}>
                 {tab.type === 'terminal' ? (
-                   <TerminalPane subTab={tab} connection={session.connection} visible={session.activeSubTabId === tab.id} />
+                   <TerminalPane 
+                      subTab={tab} 
+                      connection={session.connection} 
+                      visible={session.activeSubTabId === tab.id}
+                      onLoading={(l) => updateSubTab(tab.id, { loading: l })}
+                   />
                 ) : tab.type === 'editor' ? (
-                   <FileEditorPane subTab={tab} connection={session.connection} visible={session.activeSubTabId === tab.id} />
+                   <FileEditorPane 
+                      subTab={tab} 
+                      connection={session.connection} 
+                      visible={session.activeSubTabId === tab.id}
+                      onLoading={(l) => updateSubTab(tab.id, { loading: l })}
+                   />
                 ) : (
                    <SFTPPane 
                      subTab={tab} 
                      connection={session.connection} 
                      visible={session.activeSubTabId === tab.id} 
                      onPathChange={(path) => updateSubTab(tab.id, { path, title: path })}
+                     onLoading={(l) => updateSubTab(tab.id, { loading: l })}
                      onOpenTerminal={(path) => addSubTab('terminal', path)}
                      onOpenFile={(path) => addSubTab('editor', path)}
                      clipboard={clipboard}

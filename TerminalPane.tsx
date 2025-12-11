@@ -5,7 +5,7 @@ import { SubTab, SSHConnection } from './types';
 import { ContextMenu, ContextMenuOption } from './Modals';
 import { cn } from './utils';
 
-export const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, connection: SSHConnection, visible: boolean }) => {
+export const TerminalPane = ({ subTab, connection, visible, onLoading }: { subTab: SubTab, connection: SSHConnection, visible: boolean, onLoading: (l: boolean) => void }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -113,6 +113,7 @@ export const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, 
         });
 
         try {
+          onLoading(true);
           term.writeln(`\x1b[97mConnecting to ${connection.host}...\x1b[0m\r\n`);
           await window.electron?.sshConnect({ ...connection, id: subTab.connectionId, rows: term.rows, cols: term.cols });
           setIsConnected(true);
@@ -126,6 +127,8 @@ export const TerminalPane = ({ subTab, connection, visible }: { subTab: SubTab, 
         } catch (err: any) {
           term.writeln(`\r\n\x1b[31mError: ${err.message}\x1b[0m`);
           setIsConnected(false);
+        } finally {
+          onLoading(false);
         }
         return () => {
           resizeObserver.disconnect();
