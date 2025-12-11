@@ -5,12 +5,14 @@ import { SubTab, SSHConnection } from './types';
 import { ContextMenu, ContextMenuOption } from './Modals';
 import { cn } from './utils';
 
+type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
+
 export const TerminalPane = ({ subTab, connection, visible, onLoading }: { subTab: SubTab, connection: SSHConnection, visible: boolean, onLoading: (l: boolean) => void }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const connectedRef = useRef(false);
-  const [isConnected, setIsConnected] = useState(false);
+  const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [contextMenu, setContextMenu] = useState<{x: number, y: number, options: ContextMenuOption[]} | null>(null);
   const [fontSize, setFontSize] = useState(14);
@@ -41,12 +43,15 @@ export const TerminalPane = ({ subTab, connection, visible, onLoading }: { subTa
             xtermRef.current.dispose();
             xtermRef.current = null;
         }
+        setStatus('connecting');
     }
 
     if (connectedRef.current) return;
 
     const initTerminal = async () => {
       connectedRef.current = true;
+      setStatus('connecting');
+      
       if (terminalRef.current && !xtermRef.current) {
         const term = new XTerm({
           theme: { background: '#09090b', foreground: '#e4e4e7', cursor: '#ffffff', selectionBackground: '#5b21b6' }, 
@@ -108,15 +113,15 @@ export const TerminalPane = ({ subTab, connection, visible, onLoading }: { subTa
         const cleanupClose = window.electron?.onSSHClosed(({ connectionId }) => {
            if (connectionId === subTab.connectionId) {
              term.writeln('\r\n\x1b[31mConnection closed.\x1b[0m');
-             setIsConnected(false);
+             setStatus('disconnected');
            }
         });
 
         try {
           onLoading(true);
-          term.writeln(`\x1b[97mConnecting to ${connection.host}...\x1b[0m\r\n`);
+          // Removed manual "Connecting..." log since we have a proper UI overlay now
           await window.electron?.sshConnect({ ...connection, id: subTab.connectionId, rows: term.rows, cols: term.cols });
-          setIsConnected(true);
+          setStatus('connected');
           fitAddon.fit();
           if (subTab.path && subTab.path !== '/') {
              setTimeout(() => {
@@ -126,7 +131,7 @@ export const TerminalPane = ({ subTab, connection, visible, onLoading }: { subTa
           }
         } catch (err: any) {
           term.writeln(`\r\n\x1b[31mError: ${err.message}\x1b[0m`);
-          setIsConnected(false);
+          setStatus('disconnected');
         } finally {
           onLoading(false);
         }
@@ -200,7 +205,7 @@ export const TerminalPane = ({ subTab, connection, visible, onLoading }: { subTa
                 label: "Reconnect", 
                 icon: <i className="fa-solid fa-rotate-right text-[14px]"/>, 
                 onClick: () => { setReconnectAttempt(prev => prev + 1); },
-                danger: !isConnected
+                danger: status !== 'connected'
             },
             { 
                 label: "Cancel (Ctrl+C)", 
@@ -230,8 +235,26 @@ export const TerminalPane = ({ subTab, connection, visible, onLoading }: { subTa
        <div ref={terminalRef} className="w-full h-full" />
        {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} options={contextMenu.options} onClose={() => setContextMenu(null)} />}
        
-       {!isConnected && xtermRef.current && (
-         <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 backdrop-blur-[2px] animate-in fade-in duration-300">
+       {status === 'connecting' && (
+         <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#09090b] animate-in fade-in duration-200">
+             <div className="flex flex-col items-center gap-4">
+                  <div className="relative w-12 h-12">
+                     <div className="absolute inset-0 rounded-full border-4 border-zinc-800"></div>
+                     <div className="absolute inset-0 rounded-full border-4 border-t-violet-500 border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
+                     <div className="absolute inset-0 flex items-center justify-center">
+                        <i className="fa-solid fa-terminal text-zinc-600 text-sm" />
+                     </div>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <h3 className="text-sm font-medium text-zinc-300">Connecting to Server</h3>
+                    <p className="text-xs text-zinc-500 font-mono">{connection.username}@{connection.host}</p>
+                  </div>
+             </div>
+         </div>
+       )}
+
+       {status === 'disconnected' && (
+         <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-300">
              <div className="bg-zinc-900 border border-zinc-700 p-6 rounded-xl shadow-2xl flex flex-col items-center">
                  <div className="h-12 w-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
                     <i className="fa-solid fa-plug-circle-xmark text-red-400 text-2xl" />
