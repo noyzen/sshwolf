@@ -206,34 +206,34 @@ export const FileEditorPane = ({ subTab, connection, visible, onLoading }: { sub
       bg: "bg-zinc-950",
       toolbar: "bg-zinc-900 border-b border-zinc-800",
       text: "text-zinc-300",
-      gutter: "bg-zinc-900 text-zinc-500 border-r border-zinc-800",
+      gutter: "bg-zinc-950 text-zinc-600 border-r border-zinc-800/50",
       statusbar: "bg-zinc-900 text-zinc-400 border-t border-zinc-800"
   };
 
   return (
     <div className={cn("flex flex-col h-full font-sans relative group", theme.bg)}>
        {/* Toolbar */}
-       <div className={cn("h-12 flex items-center justify-between px-4 shadow-sm shrink-0 z-20 relative", theme.toolbar)}>
-          <div className="flex items-center gap-4 overflow-hidden">
+       <div className={cn("h-10 flex items-center justify-between px-3 shadow-sm shrink-0 z-20 relative select-none", theme.toolbar)}>
+          <div className="flex items-center gap-3 overflow-hidden">
              <div className="flex items-center gap-2 text-zinc-300">
-                <i className="fa-regular fa-file-lines text-violet-400 text-[18px]" />
+                <i className="fa-regular fa-file-lines text-violet-400 text-[16px]" />
                 <span className="font-mono text-xs truncate max-w-[300px] text-zinc-200">{subTab.path}</span>
              </div>
              <div className="h-4 w-px bg-zinc-700" />
              <div className="flex items-center gap-1">
-                 <button onClick={() => setFontSize(s => Math.max(10, s-1))} className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white"><i className="fa-solid fa-minus text-[14px]" /></button>
+                 <button onClick={() => setFontSize(s => Math.max(10, s-1))} className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white"><i className="fa-solid fa-minus text-[12px]" /></button>
                  <span className="text-xs text-zinc-500 w-6 text-center">{fontSize}</span>
-                 <button onClick={() => setFontSize(s => Math.min(24, s+1))} className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white"><i className="fa-solid fa-plus text-[14px]" /></button>
+                 <button onClick={() => setFontSize(s => Math.min(24, s+1))} className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white"><i className="fa-solid fa-plus text-[12px]" /></button>
                  <div className="h-4 w-px bg-zinc-700 mx-1" />
-                 <button onClick={() => setWordWrap(!wordWrap)} className={cn("p-1.5 rounded transition-colors", wordWrap ? "bg-zinc-800 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-white")} title="Toggle Word Wrap"><i className="fa-solid fa-paragraph text-[14px]" /></button>
-                 <button onClick={() => setShowFind(!showFind)} className={cn("p-1.5 rounded transition-colors", showFind ? "bg-zinc-800 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-white")} title="Find & Replace (Ctrl+F)"><i className="fa-solid fa-magnifying-glass text-[14px]" /></button>
+                 <button onClick={() => setWordWrap(!wordWrap)} className={cn("p-1 rounded transition-colors", wordWrap ? "bg-zinc-800 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-white")} title="Toggle Word Wrap"><i className="fa-solid fa-paragraph text-[12px]" /></button>
+                 <button onClick={() => setShowFind(!showFind)} className={cn("p-1 rounded transition-colors", showFind ? "bg-zinc-800 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-white")} title="Find & Replace (Ctrl+F)"><i className="fa-solid fa-magnifying-glass text-[12px]" /></button>
              </div>
           </div>
           <div className="flex gap-2">
-             <button onClick={loadFile} className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors" title="Reload">
-                 <i className={cn("fa-solid fa-rotate text-[14px]", loading && "fa-spin")} />
+             <button onClick={loadFile} className="h-7 w-7 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 rounded transition-colors" title="Reload">
+                 <i className={cn("fa-solid fa-rotate text-[12px]", loading && "fa-spin")} />
              </button>
-             <button disabled={saving || loading} onClick={handleSave} className="flex items-center gap-2 px-4 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition-all disabled:opacity-50 font-medium shadow-lg shadow-violet-500/10">
+             <button disabled={saving || loading} onClick={handleSave} className="flex items-center gap-2 h-7 px-3 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded transition-all disabled:opacity-50 font-medium shadow-sm">
                {saving ? <i className="fa-solid fa-spinner fa-spin text-[12px]" /> : <i className="fa-regular fa-floppy-disk text-[12px]" />} Save
              </button>
           </div>
@@ -241,7 +241,7 @@ export const FileEditorPane = ({ subTab, connection, visible, onLoading }: { sub
 
        {/* Find Widget */}
        {showFind && (
-         <div className="absolute top-14 right-4 z-30 w-80 bg-zinc-900 border border-zinc-700 shadow-2xl rounded-lg p-2 animate-in fade-in slide-in-from-top-2 duration-150">
+         <div className="absolute top-12 right-4 z-30 w-80 bg-zinc-900 border border-zinc-700 shadow-2xl rounded-lg p-2 animate-in fade-in slide-in-from-top-2 duration-150">
             <div className="flex flex-col gap-2">
                <div className="flex items-center gap-2">
                    <div className="flex-1 relative">
@@ -295,7 +295,7 @@ export const FileEditorPane = ({ subTab, connection, visible, onLoading }: { sub
               {/* Line Numbers Gutter */}
               <div 
                 ref={lineNumbersRef}
-                className={cn("h-full py-4 text-right pr-3 pl-2 select-none overflow-hidden text-zinc-600 font-mono hidden md:block w-[3.5rem] shrink-0", theme.gutter)}
+                className={cn("h-full py-4 text-right pr-3 pl-2 select-none overflow-hidden font-mono hidden md:block w-[3.5rem] shrink-0", theme.gutter)}
                 style={{ 
                     fontSize: `${fontSize}px`, 
                     lineHeight: '1.5',

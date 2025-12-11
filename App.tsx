@@ -134,7 +134,7 @@ export default function App() {
               key={session.id}
               onClick={() => setActiveSessionId(session.id)}
               className={cn(
-                "group relative flex items-center gap-2 px-3 h-8 min-w-[140px] max-w-[200px] rounded-t-lg border-t border-x text-sm cursor-pointer transition-all no-drag",
+                "group relative flex items-center gap-2 px-3 h-8 min-w-[140px] max-w-[200px] border-t border-x text-sm cursor-pointer transition-all no-drag",
                 activeSessionId === session.id 
                   ? "bg-zinc-900 border-zinc-700 text-violet-100 z-10 font-medium shadow-sm" 
                   : "bg-zinc-900/50 border-transparent text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300 mb-0.5"
@@ -144,7 +144,7 @@ export default function App() {
                <span className="truncate flex-1">{session.connection.name}</span>
                <button onClick={(e) => { e.stopPropagation(); closeServerSession(session.id); }} className="opacity-0 group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400 p-0.5 rounded transition-all no-drag"><i className="fa-solid fa-xmark text-[12px]" /></button>
                {activeSessionId === session.id && <div className="absolute -bottom-[1px] left-0 right-0 h-[1px] bg-zinc-900 z-20" />}
-               {activeSessionId === session.id && <div className="absolute top-0 left-0 right-0 h-[2px] bg-violet-500 rounded-t-lg opacity-50" />}
+               {activeSessionId === session.id && <div className="absolute top-0 left-0 right-0 h-[2px] bg-violet-500 opacity-50" />}
             </div>
           ))}
           <button onClick={() => { setEditingConnection(null); setManagerOpen(true); }} className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-zinc-900 text-zinc-500 hover:text-violet-300 transition-colors mb-0.5 no-drag" title="New Connection"><i className="fa-solid fa-plus text-lg" /></button>
@@ -179,19 +179,22 @@ export default function App() {
         {!editingConnection ? (
           <div className="space-y-3">
              <div className="grid grid-cols-1 gap-3">
-                {connections.map(conn => (
-                  <div key={conn.id} className="group bg-zinc-950 border border-zinc-800 hover:border-violet-500/30 rounded-xl p-4 transition-all flex items-center justify-between">
-                     <div className="flex items-center gap-4 cursor-pointer flex-1" onClick={() => createServerSession(conn)}>
-                        <div className="w-10 h-10 rounded-lg bg-zinc-900 group-hover:bg-violet-900/20 flex items-center justify-center text-zinc-400 group-hover:text-violet-400 shadow-inner transition-colors"><i className="fa-solid fa-server text-xl" /></div>
-                        <div><h4 className="font-bold text-zinc-200 group-hover:text-violet-100 transition-colors">{conn.name}</h4><p className="text-xs text-zinc-500 font-mono">{conn.username}@{conn.host}</p></div>
-                     </div>
-                     <div className="flex gap-1">
-                        <button onClick={() => setEditingConnection(conn)} className="p-2 text-zinc-500 hover:bg-zinc-900 hover:text-violet-300 rounded-lg transition-colors" title="Edit"><i className="fa-solid fa-pen-to-square text-base" /></button>
-                        <button onClick={() => { if(confirm(`Delete ${conn.name}?`)) setConnections(connections.filter(c => c.id !== conn.id)); }} className="p-2 text-zinc-500 hover:bg-zinc-900 hover:text-red-400 rounded-lg transition-colors" title="Delete"><i className="fa-solid fa-trash-can text-base" /></button>
-                        <button onClick={() => createServerSession(conn)} className="ml-2 px-4 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-violet-500/20">Connect</button>
-                     </div>
-                  </div>
-                ))}
+                {connections.map(conn => {
+                  const isConnected = serverSessions.some(s => s.connection.id === conn.id);
+                  return (
+                    <div key={conn.id} className={cn("group bg-zinc-950 border border-zinc-800 rounded-xl p-4 transition-all flex items-center justify-between", isConnected ? "opacity-50" : "hover:border-violet-500/30")}>
+                       <div className={cn("flex items-center gap-4 flex-1", !isConnected && "cursor-pointer")} onClick={() => !isConnected && createServerSession(conn)}>
+                          <div className="w-10 h-10 rounded-lg bg-zinc-900 group-hover:bg-violet-900/20 flex items-center justify-center text-zinc-400 group-hover:text-violet-400 shadow-inner transition-colors"><i className="fa-solid fa-server text-xl" /></div>
+                          <div><h4 className="font-bold text-zinc-200 group-hover:text-violet-100 transition-colors">{conn.name}</h4><p className="text-xs text-zinc-500 font-mono">{conn.username}@{conn.host}</p></div>
+                       </div>
+                       <div className="flex gap-1">
+                          <button onClick={() => setEditingConnection(conn)} className="p-2 text-zinc-500 hover:bg-zinc-900 hover:text-violet-300 rounded-lg transition-colors" title="Edit"><i className="fa-solid fa-pen-to-square text-base" /></button>
+                          <button onClick={() => { if(confirm(`Delete ${conn.name}?`)) setConnections(connections.filter(c => c.id !== conn.id)); }} className="p-2 text-zinc-500 hover:bg-zinc-900 hover:text-red-400 rounded-lg transition-colors" title="Delete"><i className="fa-solid fa-trash-can text-base" /></button>
+                          <button onClick={() => createServerSession(conn)} disabled={isConnected} className={cn("ml-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-lg", isConnected ? "bg-zinc-800 text-zinc-500 cursor-not-allowed shadow-none" : "bg-violet-600 hover:bg-violet-500 text-white shadow-violet-500/20")}>{isConnected ? "Connected" : "Connect"}</button>
+                       </div>
+                    </div>
+                  );
+                })}
                 <button onClick={() => setEditingConnection({ port: 22 })} className="w-full py-3 border-2 border-dashed border-zinc-800 hover:border-violet-500/30 hover:bg-violet-500/5 text-zinc-500 hover:text-violet-300 rounded-xl transition-all flex items-center justify-center gap-2 font-medium"><i className="fa-solid fa-plus text-lg" /> Add New Connection</button>
              </div>
           </div>
