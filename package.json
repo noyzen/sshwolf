@@ -25,11 +25,10 @@
       "electron/**/*.js"
     ],
     "win": {
-      "signAndEditExecutable": false,
-      "verifyUpdateCodeSignature": false,
       "target": [
         "nsis",
-        "zip"
+        "zip",
+        "portable"
       ],
       "icon": "public/appicon.png"
     }
