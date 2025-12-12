@@ -2,6 +2,10 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 import { Client } from 'ssh2';
 import fs from 'fs';
+import { Buffer } from 'buffer';
+
+// Fix for missing __dirname type definition
+declare const __dirname: string;
 
 // Note: __dirname is available globally in CommonJS, provided @types/node is installed.
 
@@ -40,7 +44,7 @@ function saveWindowState() {
 function createWindow() {
   const state = loadWindowState();
 
-  const isDev = process.env.npm_lifecycle_event === 'dev:electron' || process.argv.includes('--dev');
+  const isDev = process.env.npm_lifecycle_event === 'dev:electron' || (process as any).argv.includes('--dev');
   // Resolve icon path based on environment
   const iconPath = isDev 
     ? path.join(__dirname, '../public/appicon.png')
@@ -90,7 +94,7 @@ function createWindow() {
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  if ((process as any).platform !== 'darwin') {
     app.quit();
   }
 });

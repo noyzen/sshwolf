@@ -232,7 +232,7 @@ export const TerminalPane = ({ subTab, connection, visible, onLoading }: { subTa
 
   return (
     <div className="relative w-full h-full group bg-[#09090b]" onContextMenu={handleRightClick} onWheel={handleWheel}>
-       <div ref={terminalRef} className="w-full h-full" />
+       <div ref={terminalRef} className="w-full h-full pl-4 pt-4 pb-4" />
        {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} options={contextMenu.options} onClose={() => setContextMenu(null)} />}
        
        {status === 'connecting' && (
